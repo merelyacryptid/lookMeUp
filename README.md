@@ -98,7 +98,7 @@ LookMeUp operates on an asynchronous native-core architecture:
 ## Roadmap
 
 - [x] **Phase 0: Environment & Scaffolding** - Toolchain setup, Tauri v2 scaffold, folder anatomy walkthrough.
-- [ ] **Phase 1: IPC Bridge** - Rust `lookup_word` command, typed definitions, serde serialization, and frontend `invoke`.
+- [x] **Phase 1: IPC Bridge** - Rust `lookup_word` command, typed definitions, serde serialization, and frontend `invoke`.
 - [ ] **Phase 2: Offline SQLite Dictionary** - Python build script for Kaikki.org Wiktionary dumps, exact match, and lemma inflection fallback.
 - [ ] **Phase 3: EPUB Reader** - File picker dialog plugin, `foliate-js` integration, selection capture.
 - [ ] **Phase 4: Definition Popup** - Non-intrusive floating popup, dark mode theme, keyboard shortcuts.
