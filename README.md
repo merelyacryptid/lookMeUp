@@ -6,7 +6,7 @@
 
 ## About The Project
 
-As someone who reads a lot, I hated having my reading flow broken every time I hit an unfamiliar word while disconnected from the internet—which happens constantly around my college campus. Most dictionary tools either fail completely without a network connection, leak what you read to third-party APIs, or run on bloated Electron runtimes that eat hundreds of megabytes of RAM just to render text.
+As someone who reads a lot, I hated having my reading flow broken every time I hit an unfamiliar word while disconnected from the internet (which happens more often than you think on my college campus). Most dictionary tools either fail completely without a network connection, leak what you read to third-party APIs, or run on bloated Electron runtimes that eat hundreds of megabytes of RAM just to render text.
 
 LookMeUp was built to fix this with a systems-first mindset:
 * **Zero Latency:** Queries a local, pre-indexed SQLite dictionary in under 50 ms directly from Rust.
