@@ -1,14 +1,28 @@
 import { invoke } from "@tauri-apps/api/core";
 
+interface Definition {
+  word: string;
+  part_of_speech: string;
+  meanings: string[];
+}
+
+
+
 let greetInputEl: HTMLInputElement | null;
 let greetMsgEl: HTMLElement | null;
 
-async function greet() {
-  if (greetMsgEl && greetInputEl) {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsgEl.textContent = await invoke("greet", {
-      name: greetInputEl.value,
-    });
+async function lookup() {
+  if (!greetInputEl || !greetMsgEl) return;
+  const word = greetInputEl.value.trim();
+
+  try {
+    const def = await invoke<Definition>("lookup_word", { word });
+    greetMsgEl.innerHTML = `
+      <strong>${def.word}</strong> <em>(${def.part_of_speech})</em>
+      <ul>${def.meanings.map(m => `<li>${m}</li>`).join("")}</ul>
+    `;
+  } catch (err) {
+    greetMsgEl.textContent = `Error: ${err}`;
   }
 }
 
@@ -17,6 +31,6 @@ window.addEventListener("DOMContentLoaded", () => {
   greetMsgEl = document.querySelector("#greet-msg");
   document.querySelector("#greet-form")?.addEventListener("submit", (e) => {
     e.preventDefault();
-    greet();
+    lookup();
   });
 });
