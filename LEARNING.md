@@ -19,3 +19,15 @@
 * **What we did:** Defined the matching TypeScript `interface Definition`, replaced the starter greeting with an async `lookup()` function using `invoke<Definition>("lookup_word", { word })`, added try/catch error handling, and wired it up to the submit event listener in `src/main.ts`.
 * **Key Concept:** End-to-end typed IPC contract. `invoke` in `@tauri-apps/api/core` sends a message to the native Rust process. Rust deserializes arguments, executes `lookup_word`, serializes the `Definition` result, and resolves the TypeScript Promise. If Rust returns `Err`, the Promise rejects and triggers the JavaScript `catch` block.
 * **Gotcha:** Argument names passed in the JavaScript object (`{ word }`) must match the Rust parameter names (`word: String`) exactly; mismatch causes deserialization failure at the IPC layer.
+
+
+
+notes:
+- learn:
+- b-tree indexing in SQLite
+
+
+## Step 2.1: SQLite Dictionary Schema and Python Database Builder
+* **What we did:** Designed an indexed relational schema (`entries` and `forms` tables with `COLLATE NOCASE` indexes) and wrote a Python builder script (`scripts/build_sample_db.py`) to generate a local SQLite database (`dictionary.db`) using prepared statements and transactions.
+* **Key Concept:** B-tree indexed offline storage vs. in-memory JSON. An indexed SQLite lookup performs binary search over disk pages in O(log N) time, achieving sub-millisecond retrieval with near-zero idle RAM overhead compared to parsing megabytes of JSON into memory.
+* **Gotcha:** When executing SQL queries, parameter placeholders (`?`) must be used instead of string formatting. Parameterized queries compile the SQL AST once and safely bind raw values, preventing syntax crashes on words with quotes (like `o'clock`) and eliminating SQL injection.
