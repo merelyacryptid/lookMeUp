@@ -43,3 +43,9 @@ notes:
 * **What we did:** Diagnosed and resolved the linker error `export ordinal too large: 90667` by removing `"cdylib"` from `crate-type` in `src-tauri/Cargo.toml`.
 * **Key Concept:** Windows PE/COFF Export Address Table (EAT) architecture. Windows `.dll` files index exported symbols using 16-bit unsigned integers, capping total exported symbols at 65,535. When building a `cdylib` with deep dependencies (Tauri, WebView2, SQLite, ICU), the number of exported symbols exceeded 65,535, causing GNU `ld.exe` to fail.
 * **Gotcha:** Tauri scaffolds `crate-type = ["staticlib", "cdylib", "rlib"]` by default for cross-compiling to mobile (Android requires a `.so` cdylib). For desktop desktop binaries (`main.rs`), `cdylib` is not needed; `["staticlib", "rlib"]` is sufficient and avoids the 16-bit PE export limit under MinGW.
+
+
+## Step 3.1: Tauri v2 Plugin Architecture & Capability Permissions
+* **What we did:** Installed `@tauri-apps/plugin-dialog` (frontend) and `tauri-plugin-dialog` (Rust), registered the plugin in `src-tauri/src/lib.rs`, and configured the permission `dialog:default` in `src-tauri/capabilities/default.json`.
+* **Key Concept:** Tauri v2 plugin and security architecture. In v2, native OS features (dialogs, filesystem, notifications) are decentralized into standalone plugins. Even when a plugin is registered in Rust, frontend invocations are blocked by default unless the window's capability manifest explicitly lists the required permissions (principle of least privilege).
+* **Gotcha:** Attempting to call `@tauri-apps/plugin-dialog` from JavaScript without adding `"dialog:default"` (or specific sub-permissions like `"dialog:allow-open"`) to `capabilities/default.json` results in a runtime security denial rejection.
