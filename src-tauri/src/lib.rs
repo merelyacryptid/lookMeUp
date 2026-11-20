@@ -2,6 +2,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Definition {
@@ -70,6 +71,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .setup(|app| {
+            let shortcut: Shortcut = "ctrl+alt+d".parse().map_err(|e| format!("{:?}", e))?;
+            app.global_shortcut().on_shortcut(shortcut, |_app, shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    println!("Global shortcut triggered: {:?}", shortcut);
+                }
+            })?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![lookup_word])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

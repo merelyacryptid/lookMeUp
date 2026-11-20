@@ -55,3 +55,9 @@ notes:
 * **What we did:** Evaluated the software engineering tradeoffs between building a custom EPUB reader vs. a universal system-wide desktop companion. Refactored the project roadmap and architecture in `README.md`.
 * **Key Concept:** The Unix philosophy: "Do one thing and do it well." Building a full-fledged EPUB reader incurs immense scope creep (pagination, reflow, bookmarks, typography controls, file formats) and forces users to abandon their preferred reading software. Transforming LookMeUp into a system-wide companion allows users to keep their favorite readers while giving them instant offline lookups across any app on the operating system.
 * **Gotcha:** Process isolation on modern desktop OSes prevents arbitrary code injection into third-party apps. Clean, OS-sanctioned interaction requires using global shortcuts, clipboard/accessibility APIs, and a floating overlay window rather than in-process DLL injection.
+
+
+## Step 3.1: OS-Level Global Shortcut Registration in Tauri v2
+* **What we did:** Added `tauri-plugin-global-shortcut` to `src-tauri/Cargo.toml`, configured its permission in `src-tauri/capabilities/default.json`, and registered a system-wide hotkey (`Ctrl+Alt+D`) in the `setup` hook in `src-tauri/src/lib.rs`.
+* **Key Concept:** Win32 `RegisterHotKey` vs. in-window DOM key listeners. While standard webview listeners only receive events when focused, global shortcuts hook into the OS keyboard dispatcher at the system level. When the key chord is pressed anywhere in Windows, the OS signals the background Rust process directly.
+* **Gotcha:** Global shortcuts are system-wide unique registrations per session. If another active application has already claimed the exact key combination (or if unregister is not handled on shutdown), registration can fail. Handling errors gracefully in the `.setup()` hook is essential.
