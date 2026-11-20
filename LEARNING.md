@@ -37,3 +37,9 @@ notes:
 * **What we did:** Added `rusqlite` with the `bundled` feature, implemented exact-match querying on `entries`, and added morphological fallback on the `forms` table inside `lookup_word` in `src-tauri/src/lib.rs`. Timed query duration using `std::time::Instant`.
 * **Key Concept:** Morphological lemma resolution and zero-cost error propagation. Using `rusqlite::OptionalExtension` converts "not found" SQL states into `Ok(None)` instead of hard errors. If exact lookup yields `None`, a secondary index lookup on `forms` resolves inflected forms (`scored` -> `score`) before returning `Ok(Definition)`.
 * **Gotcha:** Relative paths in desktop development: during `tauri dev`, the Rust binary's working directory is `src-tauri/`, making `../dictionary.db` resolve to the workspace root. In production distribution, assets must be accessed via Tauri's resource directory API (`app.path().resource_dir()`).
+
+
+## Step 2.3: Windows PE Export Ordinal Limit & MinGW Linker Resolution
+* **What we did:** Diagnosed and resolved the linker error `export ordinal too large: 90667` by removing `"cdylib"` from `crate-type` in `src-tauri/Cargo.toml`.
+* **Key Concept:** Windows PE/COFF Export Address Table (EAT) architecture. Windows `.dll` files index exported symbols using 16-bit unsigned integers, capping total exported symbols at 65,535. When building a `cdylib` with deep dependencies (Tauri, WebView2, SQLite, ICU), the number of exported symbols exceeded 65,535, causing GNU `ld.exe` to fail.
+* **Gotcha:** Tauri scaffolds `crate-type = ["staticlib", "cdylib", "rlib"]` by default for cross-compiling to mobile (Android requires a `.so` cdylib). For desktop desktop binaries (`main.rs`), `cdylib` is not needed; `["staticlib", "rlib"]` is sufficient and avoids the 16-bit PE export limit under MinGW.
