@@ -31,3 +31,9 @@ notes:
 * **What we did:** Designed an indexed relational schema (`entries` and `forms` tables with `COLLATE NOCASE` indexes) and wrote a Python builder script (`scripts/build_sample_db.py`) to generate a local SQLite database (`dictionary.db`) using prepared statements and transactions.
 * **Key Concept:** B-tree indexed offline storage vs. in-memory JSON. An indexed SQLite lookup performs binary search over disk pages in O(log N) time, achieving sub-millisecond retrieval with near-zero idle RAM overhead compared to parsing megabytes of JSON into memory.
 * **Gotcha:** When executing SQL queries, parameter placeholders (`?`) must be used instead of string formatting. Parameterized queries compile the SQL AST once and safely bind raw values, preventing syntax crashes on words with quotes (like `o'clock`) and eliminating SQL injection.
+
+
+## Step 2.2: SQLite Querying, Morphological Fallback, and Latency Measurement in Rust
+* **What we did:** Added `rusqlite` with the `bundled` feature, implemented exact-match querying on `entries`, and added morphological fallback on the `forms` table inside `lookup_word` in `src-tauri/src/lib.rs`. Timed query duration using `std::time::Instant`.
+* **Key Concept:** Morphological lemma resolution and zero-cost error propagation. Using `rusqlite::OptionalExtension` converts "not found" SQL states into `Ok(None)` instead of hard errors. If exact lookup yields `None`, a secondary index lookup on `forms` resolves inflected forms (`scored` -> `score`) before returning `Ok(Definition)`.
+* **Gotcha:** Relative paths in desktop development: during `tauri dev`, the Rust binary's working directory is `src-tauri/`, making `../dictionary.db` resolve to the workspace root. In production distribution, assets must be accessed via Tauri's resource directory API (`app.path().resource_dir()`).

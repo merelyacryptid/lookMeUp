@@ -1,5 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Definition {
@@ -9,18 +11,58 @@ pub struct Definition {
 }
 #[tauri::command]
 fn lookup_word(word: String) -> Result<Definition, String> {
-    if word.trim().is_empty() {
+    let start = Instant::now();
+    let clean_word = word.trim();
+    if clean_word.is_empty() {
         return Err("Word cannot be empty".to_string());
     }
 
-    Ok(Definition {
-        word: word.clone(),
-        part_of_speech: "noun".to_string(),
-        meanings: vec![
-            format!("Mock definition 1 for '{}'", word),
-            format!("Mock definition 2 for '{}'", word),
-        ],
-    })
+    let conn =
+        Connection::open("../dictionary.db").map_err(|e| format!("Failed to open DB: {}", e))?;
+
+    // Helper to fetch an entry by headword
+    let fetch_entry = |target: &str| -> Result<Option<Definition>, String> {
+        conn.query_row(
+            "SELECT word, part_of_speech, meanings FROM entries WHERE word = ?1 COLLATE NOCASE",
+            params![target],
+            |row| {
+                let w: String = row.get(0)?;
+                let pos: String = row.get(1)?;
+                let m_json: String = row.get(2)?;
+                let meanings: Vec<String> = serde_json::from_str(&m_json).unwrap_or_default();
+                Ok(Definition {
+                    word: w,
+                    part_of_speech: pos,
+                    meanings,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| format!("Query error: {}", e))
+    };
+
+    // 1. Try exact match
+    let mut result = fetch_entry(clean_word)?;
+
+    // 2. Lemma fallback: check forms table
+    if result.is_none() {
+        let headword: Option<String> = conn
+            .query_row(
+                "SELECT headword FROM forms WHERE form = ?1 COLLATE NOCASE",
+                params![clean_word],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Query error: {}", e))?;
+
+        if let Some(hw) = headword {
+            result = fetch_entry(&hw)?;
+        }
+    }
+
+    println!("Lookup for '{}' took {:?}", clean_word, start.elapsed());
+
+    result.ok_or_else(|| format!("'{}' not found in dictionary", clean_word))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
