@@ -49,3 +49,9 @@ notes:
 * **What we did:** Installed `@tauri-apps/plugin-dialog` (frontend) and `tauri-plugin-dialog` (Rust), registered the plugin in `src-tauri/src/lib.rs`, and configured the permission `dialog:default` in `src-tauri/capabilities/default.json`.
 * **Key Concept:** Tauri v2 plugin and security architecture. In v2, native OS features (dialogs, filesystem, notifications) are decentralized into standalone plugins. Even when a plugin is registered in Rust, frontend invocations are blocked by default unless the window's capability manifest explicitly lists the required permissions (principle of least privilege).
 * **Gotcha:** Attempting to call `@tauri-apps/plugin-dialog` from JavaScript without adding `"dialog:default"` (or specific sub-permissions like `"dialog:allow-open"`) to `capabilities/default.json` results in a runtime security denial rejection.
+
+
+## Step 3.0: Architectural Pivot - System-Wide Companion vs. Monolithic Reader
+* **What we did:** Evaluated the software engineering tradeoffs between building a custom EPUB reader vs. a universal system-wide desktop companion. Refactored the project roadmap and architecture in `README.md`.
+* **Key Concept:** The Unix philosophy: "Do one thing and do it well." Building a full-fledged EPUB reader incurs immense scope creep (pagination, reflow, bookmarks, typography controls, file formats) and forces users to abandon their preferred reading software. Transforming LookMeUp into a system-wide companion allows users to keep their favorite readers while giving them instant offline lookups across any app on the operating system.
+* **Gotcha:** Process isolation on modern desktop OSes prevents arbitrary code injection into third-party apps. Clean, OS-sanctioned interaction requires using global shortcuts, clipboard/accessibility APIs, and a floating overlay window rather than in-process DLL injection.
