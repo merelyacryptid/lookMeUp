@@ -67,3 +67,13 @@ notes:
 * **What we did:** Added `tauri-plugin-clipboard-manager` to `Cargo.toml`, permitted clipboard read/write in `capabilities/default.json`, and hooked clipboard text extraction into the `Ctrl+Alt+D` global shortcut listener in `src-tauri/src/lib.rs`.
 * **Key Concept:** Cross-process text acquisition. Operating system security boundaries prevent directly querying the DOM or text selection of third-party apps. Using the system clipboard provides a universal, permission-safe communication channel to retrieve text selected by the user in any reader, browser, or editor.
 * **Gotcha:** Syntax placement in Rust: method chains (`.plugin(...)`) and executable statements cannot exist at global module scope. They must live inside a function body (such as `pub fn run()`), chained to the builder instance.
+
+
+## Step 4.1: Frameless Floating Popup Window & Cursor Positioning
+* **What we did:** Configured a frameless, transparent, floating (`alwaysOnTop`), `skipTaskbar` window in `src-tauri/tauri.conf.json`. In `src-tauri/src/lib.rs`, queried mouse cursor coordinates via `app.cursor_position()` on global shortcut press, repositioned the popup next to the active cursor, and emitted `"show-definition"` event payloads.
+* **Key Concept:** Desktop overlay architecture. Setting `decorations: false` strips OS chrome (titlebar and min/max/close controls), while `transparent: true` delegates shape clipping to CSS border-radius and background blur. Combining `alwaysOnTop: true` with physical coordinate offsets positions the companion directly in the user's line of sight without taking over window management.
+* **Gotcha:** Rust's `app.cursor_position()` returns physical monitor pixels (`PhysicalPosition`), while webviews often think in logical pixels (DPI scaling). Passing `Position::Physical` directly ensures pixel-perfect window placement regardless of Windows display scale (125%, 150%, etc.).
+
+## Step 4.2: Floating Card UI, Event Listening, and Auto-Dismiss
+* **What we did:** Redesigned the frontend into a glassmorphic floating dark-mode card, implemented the `listen("show-definition")` event subscriber in TypeScript, and added native auto-dismiss handlers via `invoke("hide_window")` on `Escape` keypress and window `blur`.
+* **Key Concept:** Ephemeral UX and event-driven rendering. Unlike conventional windowed applications that require manual closing, reading companions must be ephemeral. Subscribing to window `blur` (loss of focus) and `Escape` ensures the card vanishes the instant the user continues reading, maintaining undisturbed focus.

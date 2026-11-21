@@ -2,6 +2,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
+use tauri::{Emitter, Manager, PhysicalPosition, Position};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
@@ -67,6 +68,11 @@ fn lookup_word(word: String) -> Result<Definition, String> {
     result.ok_or_else(|| format!("'{}' not found in dictionary", clean_word))
 }
 
+#[tauri::command]
+fn hide_window(window: tauri::WebviewWindow) {
+    let _ = window.hide();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -79,22 +85,31 @@ pub fn run() {
             app.global_shortcut()
                 .on_shortcut(shortcut, |app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        if let Ok(text) = app.clipboard().read_text() {
-                            let trimmed = text.trim();
-                            println!("Looking up clipboard word: '{}'", trimmed);
-                            match lookup_word(trimmed.to_string()) {
-                                Ok(def) => println!(
-                                    "Found: {} ({}) -> {:?}",
-                                    def.word, def.part_of_speech, def.meanings
-                                ),
-                                Err(err) => println!("Lookup error: {}", err),
+                        if let Some(window) = app.get_webview_window("main") {
+                            // 1. Position near mouse cursor
+                            if let Ok(pos) = app.cursor_position() {
+                                let _ = window.set_position(Position::Physical(PhysicalPosition {
+                                    x: pos.x as i32 + 12,
+                                    y: pos.y as i32 + 12,
+                                }));
                             }
+
+                            // 2. Read clipboard and query SQLite
+                            if let Ok(text) = app.clipboard().read_text() {
+                                let trimmed = text.trim();
+                                let payload = lookup_word(trimmed.to_string());
+                                let _ = window.emit("show-definition", payload);
+                            }
+
+                            // 3. Reveal and focus popup
+                            let _ = window.show();
+                            let _ = window.set_focus();
                         }
                     }
                 })?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![lookup_word])
+        .invoke_handler(tauri::generate_handler![lookup_word, hide_window])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

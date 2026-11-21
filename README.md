@@ -67,7 +67,7 @@ Instead of replacing your reader, LookMeUp runs silently in the background as a 
 - [x] **Phase 1: IPC Bridge** - Rust `lookup_word` command, typed definitions, serde serialization, and frontend `invoke`.
 - [x] **Phase 2: Offline SQLite Dictionary** - SQLite schema, Python build script, exact match, and morphological lemma fallback in Rust.
 - [x] **Phase 3: Global Shortcut & Text Capture** - System-wide hotkey listener (`Ctrl+Alt+D`) and active word capture.
-- [ ] **Phase 4: Floating Cursor Popup** - Frameless, auto-positioning window at mouse cursor with blur/Esc auto-dismiss.
+- [x] **Phase 4: Floating Cursor Popup** - Frameless, auto-positioning window at mouse cursor with blur/Esc auto-dismiss.
 - [ ] **Phase 5: Full Wiktionary SQLite Pipeline** - Batch ingestion script for full Kaikki.org English Wiktionary dataset.
 - [ ] **Phase 6: System Tray & Polish** - Background tray icon, saved words history, and production installer.
 
