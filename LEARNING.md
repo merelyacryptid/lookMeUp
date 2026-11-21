@@ -61,3 +61,9 @@ notes:
 * **What we did:** Added `tauri-plugin-global-shortcut` to `src-tauri/Cargo.toml`, configured its permission in `src-tauri/capabilities/default.json`, and registered a system-wide hotkey (`Ctrl+Alt+D`) in the `setup` hook in `src-tauri/src/lib.rs`.
 * **Key Concept:** Win32 `RegisterHotKey` vs. in-window DOM key listeners. While standard webview listeners only receive events when focused, global shortcuts hook into the OS keyboard dispatcher at the system level. When the key chord is pressed anywhere in Windows, the OS signals the background Rust process directly.
 * **Gotcha:** Global shortcuts are system-wide unique registrations per session. If another active application has already claimed the exact key combination (or if unregister is not handled on shutdown), registration can fail. Handling errors gracefully in the `.setup()` hook is essential.
+
+
+## Step 3.2: Clipboard Text Capture on Global Shortcut
+* **What we did:** Added `tauri-plugin-clipboard-manager` to `Cargo.toml`, permitted clipboard read/write in `capabilities/default.json`, and hooked clipboard text extraction into the `Ctrl+Alt+D` global shortcut listener in `src-tauri/src/lib.rs`.
+* **Key Concept:** Cross-process text acquisition. Operating system security boundaries prevent directly querying the DOM or text selection of third-party apps. Using the system clipboard provides a universal, permission-safe communication channel to retrieve text selected by the user in any reader, browser, or editor.
+* **Gotcha:** Syntax placement in Rust: method chains (`.plugin(...)`) and executable statements cannot exist at global module scope. They must live inside a function body (such as `pub fn run()`), chained to the builder instance.
