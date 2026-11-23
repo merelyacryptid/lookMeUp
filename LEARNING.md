@@ -77,3 +77,9 @@ notes:
 ## Step 4.2: Floating Card UI, Event Listening, and Auto-Dismiss
 * **What we did:** Redesigned the frontend into a glassmorphic floating dark-mode card, implemented the `listen("show-definition")` event subscriber in TypeScript, and added native auto-dismiss handlers via `invoke("hide_window")` on `Escape` keypress and window `blur`.
 * **Key Concept:** Ephemeral UX and event-driven rendering. Unlike conventional windowed applications that require manual closing, reading companions must be ephemeral. Subscribing to window `blur` (loss of focus) and `Escape` ensures the card vanishes the instant the user continues reading, maintaining undisturbed focus.
+
+
+## Step 5.1: High-Throughput SQLite Bulk Ingestion & Post-Indexing
+* **What we did:** Created `scripts/build_full_db.py` to stream Wiktionary JSON Lines data (including `.gz` compressed files) into SQLite. Configured bulk ingestion pragmas (`PRAGMA synchronous = OFF`, `PRAGMA journal_mode = MEMORY`, `PRAGMA cache_size = 100000`), batched inserts, and deferred index creation until after all rows were populated.
+* **Key Concept:** Write amplification and batch transactions in relational databases. Default SQLite autocommit triggers an OS `fsync` per row, throttling inserts to ~100 rows/second. Disabling synchronous disk flushes during compilation and batching inserts across explicit transactions accelerates throughput to 100,000+ rows/second. Deferring B-tree index creation transforms $N$ separate index rebalancing operations into a single $O(N \log N)$ bulk sort.
+* **Gotcha:** Disabling `synchronous` and using `journal_mode = MEMORY` is safe during build/ETL scripts (since the entire database can simply be rebuilt if the process crashes), but should never be used for user data where power loss could cause corruption.
