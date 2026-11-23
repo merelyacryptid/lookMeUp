@@ -1,23 +1,18 @@
 # LookMeUp
 
-> A lightning-fast, 100% offline system-wide dictionary companion. Look up any word in any EPUB reader, PDF viewer, browser, or desktop app with a single keystroke in under 50 ms.
+> A distraction-free, touch-friendly desktop reader with instantaneous, 100% offline dictionary lookups.
 
 ---
 
 ## About The Project
 
-As someone who reads a lot across various apps (EPUB readers, PDF viewers, research papers in browsers), I hated having my reading flow broken every time I ran into an unfamiliar word without an active internet connection (which happens constantly around my college campus). Most online dictionary tools fail without Wi-Fi, leak reading activity to remote APIs, or require copying text into a separate heavy browser tab.
+As someone who reads a lot on laptops and 2-in-1 touchscreen devices, I hated having my reading flow broken every time I ran into an unfamiliar word without an active internet connection (which happens constantly around my college campus). Most online dictionary tools fail without Wi-Fi, leak reading activity to remote APIs, or clutter the screen with competing popups.
 
-Meanwhile, trying to build a custom EPUB reader from scratch meant reinventing pagination, fonts, themes, bookmarks, and layout engines—all while forcing users to abandon the reading apps they already love (like Kindle, Calibre, SumatraPDF, or Thorium).
-
-**LookMeUp** takes a Unix-philosophy approach: **do one thing with extreme speed and precision.** 
-
-Instead of replacing your reader, LookMeUp runs silently in the background as a universal companion:
-* **Works Anywhere:** Highlight a word in *any* reader, PDF viewer, browser, or text editor, press a hotkey (e.g. `Ctrl+Alt+D`), and an instant definition appears.
-* **Zero Latency (<50 ms):** Directly queries a local, pre-indexed SQLite B-tree database compiled from Wiktionary dumps.
-* **Morphological Fallback:** Automatically resolves inflected verbs and plurals back to their base lemmas (e.g., selecting "running" or "scored" routes to "run" or "score").
-* **Floating Minimalist Card:** A sleek, frameless floating popup appears right at your mouse cursor and disappears the moment you hit `Esc` or click away.
-* **100% Offline & Private:** Zero network requests, zero telemetry, zero accounts.
+LookMeUp is built as a distraction-free, touch-friendly reading environment:
+* **Touch-Screen Friendly:** No keyboard needed. Tap, double-tap, or highlight any word on your touchscreen or with your mouse to instantly see its meaning.
+* **Single Unified Popup:** Because LookMeUp hosts the reading canvas, you get exactly one clean, beautiful dictionary bubble positioned directly over the tapped word.
+* **Instant Offline SQLite (<50 ms):** Directly queries a local, pre-indexed SQLite B-tree database with morphological lemma fallback (e.g. tapping "scored" routes to "score").
+* **Complete Privacy:** 100% offline. Zero network calls, zero telemetry, zero accounts.
 
 ---
 
