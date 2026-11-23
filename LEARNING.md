@@ -95,3 +95,9 @@ notes:
 * **What we did:** Added explicit `"label": "main"` to the reader window in `src-tauri/tauri.conf.json` and wrapped the frontend file picker in `try/catch` with user-facing error reporting in `src/main.ts`.
 * **Key Concept:** Capability targeting in Tauri v2. In `capabilities/default.json`, permissions (such as `"dialog:default"`) are bound to specific window labels (`"windows": ["main"]`). If a window definition in `tauri.conf.json` omits the `"label"` property, capability binding fails to match the window, causing API calls like `open()` to be rejected silently at runtime.
 * **Gotcha:** Always ensure the window `label` in `tauri.conf.json` matches the strings in `capabilities/*.json` windows array, and always wrap asynchronous plugin promises in `try/catch` blocks in TypeScript to prevent unhandled rejection silence.
+
+
+## Step 5.4: Native Rust EPUB Extraction & Direct-DOM Rendering
+* **What we did:** Added the pure-Rust `zip` crate to `src-tauri/Cargo.toml`, implemented `load_epub` in `src-tauri/src/lib.rs` to extract and parse readable XHTML/HTML chapters from `.epub` archives, and wired chapter rendering and pagination controls into `src/main.ts` and `index.html`.
+* **Key Concept:** Direct-DOM rendering vs. nested iframe architectures. Rather than embedding complex iframe-based web viewers (`epub.js`) which suffer from CORS restrictions and distorted touch selection coordinates, unpacking EPUB chapters natively in Rust and rendering into the root DOM enables zero-overhead text selection (`window.getSelection()`), instant word lookup, and fluid touch interactions across the entire book.
+* **Gotcha:** EPUBs are ZIP containers containing diverse internal structures (some prefix with `OEBPS/`, others use root directories). Extracting readable body markup while filtering out navigation tables (`nav.xhtml`, `toc.ncx`) ensures clean, readable prose without formatting clutter.

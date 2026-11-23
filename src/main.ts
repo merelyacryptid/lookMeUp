@@ -7,6 +7,19 @@ interface Definition {
   meanings: string[];
 }
 
+interface EpubChapter {
+  title: string;
+  content: string;
+}
+
+interface EpubBook {
+  title: string;
+  chapters: EpubChapter[];
+}
+
+let currentBook: EpubBook | null = null;
+let currentChapterIdx = 0;
+
 const popupCard = document.querySelector<HTMLElement>("#popup-card")!;
 const popupWord = document.querySelector<HTMLElement>("#popup-word")!;
 const popupPos = document.querySelector<HTMLElement>("#popup-pos")!;
@@ -14,6 +27,39 @@ const popupBody = document.querySelector<HTMLElement>("#popup-body")!;
 const popupClose = document.querySelector<HTMLElement>("#popup-close")!;
 const openBtn = document.querySelector<HTMLElement>("#open-btn");
 const bookTitleEl = document.querySelector<HTMLElement>("#book-title");
+const readerContent = document.querySelector<HTMLElement>("#reader-content")!;
+const prevBtn = document.querySelector<HTMLButtonElement>("#prev-btn");
+const nextBtn = document.querySelector<HTMLButtonElement>("#next-btn");
+const chapterLabel = document.querySelector<HTMLElement>("#chapter-label");
+
+function renderChapter(idx: number) {
+  if (!currentBook || !currentBook.chapters[idx]) return;
+  currentChapterIdx = idx;
+
+  const ch = currentBook.chapters[idx];
+  readerContent.innerHTML = `<h1>${escapeHtml(ch.title)}</h1>${ch.content}`;
+
+  if (chapterLabel) {
+    chapterLabel.textContent = `${idx + 1} / ${currentBook.chapters.length}`;
+  }
+  if (prevBtn) prevBtn.disabled = idx <= 0;
+  if (nextBtn) nextBtn.disabled = idx >= currentBook.chapters.length - 1;
+
+  // Scroll reader to top on chapter change
+  readerContent.parentElement?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+prevBtn?.addEventListener("click", () => {
+  if (currentBook && currentChapterIdx > 0) {
+    renderChapter(currentChapterIdx - 1);
+  }
+});
+
+nextBtn?.addEventListener("click", () => {
+  if (currentBook && currentChapterIdx < currentBook.chapters.length - 1) {
+    renderChapter(currentChapterIdx + 1);
+  }
+});
 
 // Close popup
 function hidePopup() {
@@ -99,14 +145,18 @@ openBtn?.addEventListener("click", async () => {
       filters: [{ name: "EPUB Documents", extensions: ["epub"] }],
     });
 
-    if (selected && bookTitleEl) {
+    if (selected) {
       const pathStr = Array.isArray(selected) ? selected[0] : selected;
-      const fileName = pathStr.split(/[/\\]/).pop() || pathStr;
-      bookTitleEl.textContent = `Reading: ${fileName}`;
+      if (bookTitleEl) bookTitleEl.textContent = "Loading book...";
+
+      const book = await invoke<EpubBook>("load_epub", { path: pathStr });
+      currentBook = book;
+      if (bookTitleEl) bookTitleEl.textContent = book.title;
+      renderChapter(0);
     }
   } catch (err) {
     console.error("Open dialog error:", err);
-    alert(`Could not open file picker: ${err}`);
+    alert(`Could not open or render EPUB: ${err}`);
   }
 });
 
