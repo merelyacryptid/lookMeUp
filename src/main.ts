@@ -6,6 +6,7 @@ interface Definition {
   part_of_speech: string;
   meanings: string[];
   lookup_count: number;
+  is_saved: boolean;
 }
 
 interface WordHistoryItem {
@@ -13,6 +14,7 @@ interface WordHistoryItem {
   part_of_speech: string;
   meanings: string[];
   lookup_count: number;
+  is_saved: boolean;
   last_looked_up: number;
 }
 
@@ -30,6 +32,8 @@ interface EpubBook {
 // State
 let currentBook: EpubBook | null = null;
 let currentChapterIdx = 0;
+let activePopupWord = "";
+let wordbankFilter: "all" | "saved" = "all";
 
 // DOM Elements
 const readerScrollContainer = document.querySelector<HTMLElement>("#reader-scroll-container")!;
@@ -54,10 +58,16 @@ const wordbankDrawer = document.querySelector<HTMLElement>("#wordbank-drawer")!;
 const wordbankClose = document.querySelector<HTMLElement>("#wordbank-close")!;
 const wordbankSearch = document.querySelector<HTMLInputElement>("#wordbank-search")!;
 const wordbankList = document.querySelector<HTMLElement>("#wordbank-list")!;
+const wordbankTabAll = document.querySelector<HTMLButtonElement>("#wordbank-tab-all")!;
+const wordbankTabSaved = document.querySelector<HTMLButtonElement>("#wordbank-tab-saved")!;
+const countAll = document.querySelector<HTMLElement>("#count-all")!;
+const countSaved = document.querySelector<HTMLElement>("#count-saved")!;
 const popupCard = document.querySelector<HTMLElement>("#popup-card")!;
 const popupWord = document.querySelector<HTMLElement>("#popup-word")!;
 const popupPos = document.querySelector<HTMLElement>("#popup-pos")!;
 const popupCount = document.querySelector<HTMLElement>("#popup-count")!;
+const popupSaveBtn = document.querySelector<HTMLButtonElement>("#popup-save-btn")!;
+const popupSaveText = document.querySelector<HTMLElement>("#popup-save-text")!;
 const popupBody = document.querySelector<HTMLElement>("#popup-body")!;
 const popupClose = document.querySelector<HTMLElement>("#popup-close")!;
 
@@ -277,6 +287,39 @@ document.addEventListener("pointerdown", (e) => {
   }
 });
 
+function updatePopupSaveBtn(saved: boolean) {
+  if (saved) {
+    popupSaveBtn.classList.add("saved");
+    popupSaveText.textContent = "Saved";
+  } else {
+    popupSaveBtn.classList.remove("saved");
+    popupSaveText.textContent = "Save Word";
+  }
+}
+
+popupSaveBtn.addEventListener("click", async (e) => {
+  e.stopPropagation();
+  if (!activePopupWord) return;
+  try {
+    const newSaved = await invoke<boolean>("toggle_save_word", { word: activePopupWord });
+    updatePopupSaveBtn(newSaved);
+
+    // Synchronize with loaded word bank items
+    const item = wordHistoryItems.find((i) => i.word.toLowerCase() === activePopupWord.toLowerCase());
+    if (item) {
+      item.is_saved = newSaved;
+    } else if (newSaved) {
+      // Reload history to include the newly saved item
+      await loadWordBank();
+      return;
+    }
+    updateCounts();
+    applyWordBankFilter();
+  } catch (err) {
+    console.error("Failed to toggle save word:", err);
+  }
+});
+
 async function handleSelection() {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) return;
@@ -300,6 +343,9 @@ async function handleSelection() {
   popupCard.style.left = `${left}px`;
   popupCard.style.top = `${top}px`;
 
+  activePopupWord = cleanWord;
+  updatePopupSaveBtn(false);
+
   popupWord.textContent = cleanWord;
   popupPos.textContent = "...";
   popupCount.textContent = "";
@@ -308,6 +354,9 @@ async function handleSelection() {
 
   try {
     const def = await invoke<Definition>("lookup_word", { word: cleanWord });
+    activePopupWord = def.word;
+    updatePopupSaveBtn(def.is_saved);
+
     popupWord.textContent = def.word;
     popupPos.textContent = def.part_of_speech;
     popupCount.textContent = `${def.lookup_count}x`;
@@ -335,23 +384,46 @@ let wordHistoryItems: WordHistoryItem[] = [];
 async function loadWordBank() {
   try {
     wordHistoryItems = await invoke<WordHistoryItem[]>("get_word_history");
-    renderWordBank(wordHistoryItems);
+    updateCounts();
+    applyWordBankFilter();
   } catch (err) {
     console.error("Failed to load word history:", err);
     wordbankList.innerHTML = `<div class="wordbank-empty">Failed to load word history.</div>`;
   }
 }
 
+function updateCounts() {
+  countAll.textContent = String(wordHistoryItems.length);
+  countSaved.textContent = String(wordHistoryItems.filter((i) => i.is_saved).length);
+}
+
+function applyWordBankFilter() {
+  const query = wordbankSearch.value.toLowerCase().trim();
+  let filtered = wordHistoryItems;
+
+  if (wordbankFilter === "saved") {
+    filtered = filtered.filter((i) => i.is_saved);
+  }
+
+  if (query) {
+    filtered = filtered.filter(
+      (i) =>
+        i.word.toLowerCase().includes(query) ||
+        i.meanings.some((m) => m.toLowerCase().includes(query))
+    );
+  }
+
+  renderWordBank(filtered);
+}
+
 function renderWordBank(items: WordHistoryItem[]) {
   if (!items || items.length === 0) {
-    wordbankList.innerHTML = `
-      <div class="wordbank-empty">
-        No words saved yet.<br />
-        <small style="color:#52525b;margin-top:6px;display:block;">
-          Words you look up will automatically be tracked here with frequency counts.
-        </small>
-      </div>
-    `;
+    const emptyMsg =
+      wordbankFilter === "saved"
+        ? `No saved words yet.<br /><small style="color:#52525b;margin-top:6px;display:block;">Tap the "Save Word" button on any definition popup or star words below.</small>`
+        : `No words looked up yet.<br /><small style="color:#52525b;margin-top:6px;display:block;">Select words while reading to build your dictionary history.</small>`;
+
+    wordbankList.innerHTML = `<div class="wordbank-empty">${emptyMsg}</div>`;
     return;
   }
 
@@ -361,6 +433,7 @@ function renderWordBank(items: WordHistoryItem[]) {
     card.className = "wordbank-card";
 
     const firstMeaning = item.meanings && item.meanings.length > 0 ? item.meanings[0] : "";
+    const isSaved = item.is_saved;
 
     card.innerHTML = `
       <div class="wordbank-info">
@@ -371,11 +444,21 @@ function renderWordBank(items: WordHistoryItem[]) {
         </div>
         <div class="wordbank-meaning">${escapeHtml(firstMeaning)}</div>
       </div>
-      <button class="wordbank-del-btn" title="Delete from history">&times;</button>
+      <div class="wordbank-card-actions">
+        <button class="wordbank-star-btn ${isSaved ? "saved" : ""}" title="${isSaved ? "Remove from saved words" : "Save word"}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="${isSaved ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+        <button class="wordbank-del-btn" title="Delete from history">&times;</button>
+      </div>
     `;
 
     // Clicking card opens the dictionary popup in center view
     card.querySelector(".wordbank-info")?.addEventListener("click", () => {
+      activePopupWord = item.word;
+      updatePopupSaveBtn(item.is_saved);
+
       popupWord.textContent = item.word;
       popupPos.textContent = item.part_of_speech;
       popupCount.textContent = `${item.lookup_count}x`;
@@ -389,21 +472,30 @@ function renderWordBank(items: WordHistoryItem[]) {
       popupCard.classList.remove("hidden");
     });
 
+    // Star/Bookmark toggle handler
+    card.querySelector(".wordbank-star-btn")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        const newSaved = await invoke<boolean>("toggle_save_word", { word: item.word });
+        item.is_saved = newSaved;
+        if (activePopupWord.toLowerCase() === item.word.toLowerCase()) {
+          updatePopupSaveBtn(newSaved);
+        }
+        updateCounts();
+        applyWordBankFilter();
+      } catch (err) {
+        console.error("Failed to toggle save word:", err);
+      }
+    });
+
     // Delete handler
     card.querySelector(".wordbank-del-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       try {
         await invoke("delete_history_word", { word: item.word });
         wordHistoryItems = wordHistoryItems.filter((i) => i.word.toLowerCase() !== item.word.toLowerCase());
-        const query = wordbankSearch.value.toLowerCase().trim();
-        const filtered = query
-          ? wordHistoryItems.filter(
-              (i) =>
-                i.word.toLowerCase().includes(query) ||
-                i.meanings.some((m) => m.toLowerCase().includes(query))
-            )
-          : wordHistoryItems;
-        renderWordBank(filtered);
+        updateCounts();
+        applyWordBankFilter();
       } catch (err) {
         console.error("Failed to delete word:", err);
       }
@@ -413,18 +505,38 @@ function renderWordBank(items: WordHistoryItem[]) {
   });
 }
 
-wordbankSearch.addEventListener("input", () => {
-  const query = wordbankSearch.value.toLowerCase().trim();
-  if (!query) {
-    renderWordBank(wordHistoryItems);
-  } else {
-    const filtered = wordHistoryItems.filter(
-      (i) =>
-        i.word.toLowerCase().includes(query) ||
-        i.meanings.some((m) => m.toLowerCase().includes(query))
-    );
-    renderWordBank(filtered);
+// Search bar filtering
+wordbankSearch.addEventListener("input", applyWordBankFilter);
+
+// Press Enter in search bar to lookup and save any custom word
+wordbankSearch.addEventListener("keydown", async (e) => {
+  if (e.key === "Enter") {
+    const val = wordbankSearch.value.trim();
+    if (val) {
+      try {
+        await invoke("toggle_save_word", { word: val });
+        wordbankSearch.value = "";
+        await loadWordBank();
+      } catch (err) {
+        alert(String(err));
+      }
+    }
   }
+});
+
+// Tab Switchers
+wordbankTabAll.addEventListener("click", () => {
+  wordbankFilter = "all";
+  wordbankTabAll.classList.add("active");
+  wordbankTabSaved.classList.remove("active");
+  applyWordBankFilter();
+});
+
+wordbankTabSaved.addEventListener("click", () => {
+  wordbankFilter = "saved";
+  wordbankTabSaved.classList.add("active");
+  wordbankTabAll.classList.remove("active");
+  applyWordBankFilter();
 });
 
 wordbankBtn?.addEventListener("click", () => {

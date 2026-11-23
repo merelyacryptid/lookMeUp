@@ -128,8 +128,12 @@
         <span class="drawer-title">Word Bank</span>
         <button id="wordbank-close" class="popup-close-btn">&times;</button>
       </div>
+      <div class="wordbank-tabs">
+        <button id="wordbank-tab-all" class="wordbank-tab active">All Lookups (<span id="count-all">0</span>)</button>
+        <button id="wordbank-tab-saved" class="wordbank-tab">Saved Words (<span id="count-saved">0</span>)</button>
+      </div>
       <div class="wordbank-search-bar">
-        <input type="text" id="wordbank-search" class="wordbank-search-input" placeholder="Search saved words..." />
+        <input type="text" id="wordbank-search" class="wordbank-search-input" placeholder="Search or press Enter to add..." />
       </div>
       <div id="wordbank-list" class="wordbank-list"></div>
     </aside>
@@ -142,7 +146,15 @@
           <span id="popup-pos" class="popup-pos"></span>
           <span id="popup-count" class="popup-count-badge"></span>
         </div>
-        <button id="popup-close" class="popup-close-btn">&times;</button>
+        <div class="popup-header-actions">
+          <button id="popup-save-btn" class="popup-save-btn" title="Save word to Word Bank">
+            <svg class="save-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span id="popup-save-text">Save Word</span>
+          </button>
+          <button id="popup-close" class="popup-close-btn">&times;</button>
+        </div>
       </div>
       <div id="popup-body" class="popup-body"></div>
     </div>

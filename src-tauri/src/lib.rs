@@ -158,6 +158,7 @@ pub struct Definition {
     pub part_of_speech: String,
     pub meanings: Vec<String>,
     pub lookup_count: u32,
+    pub is_saved: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +167,7 @@ pub struct WordHistoryItem {
     pub part_of_speech: String,
     pub meanings: Vec<String>,
     pub lookup_count: u32,
+    pub is_saved: bool,
     pub last_looked_up: i64,
 }
 
@@ -177,16 +179,22 @@ fn get_user_db() -> Result<Connection, String> {
             part_of_speech TEXT NOT NULL,
             definition_json TEXT NOT NULL,
             lookup_count INTEGER NOT NULL DEFAULT 1,
+            is_saved INTEGER NOT NULL DEFAULT 0,
             first_looked_up INTEGER NOT NULL,
             last_looked_up INTEGER NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_word_history_saved ON word_history(is_saved, lookup_count DESC);
         CREATE INDEX IF NOT EXISTS idx_word_history_count ON word_history(lookup_count DESC);
         CREATE INDEX IF NOT EXISTS idx_word_history_last ON word_history(last_looked_up DESC);"
     ).map_err(|e| format!("Failed to initialize word_history table: {}", e))?;
+
+    // Safe migration if table previously existed without is_saved column
+    let _ = conn.execute("ALTER TABLE word_history ADD COLUMN is_saved INTEGER NOT NULL DEFAULT 0", []);
+
     Ok(conn)
 }
 
-fn record_lookup(def: &Definition) -> u32 {
+fn record_lookup(def: &Definition) -> (u32, bool) {
     if let Ok(conn) = get_user_db() {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -195,22 +203,65 @@ fn record_lookup(def: &Definition) -> u32 {
         let json_meanings = serde_json::to_string(&def.meanings).unwrap_or_default();
 
         let _ = conn.execute(
-            "INSERT INTO word_history (word, part_of_speech, definition_json, lookup_count, first_looked_up, last_looked_up)
-             VALUES (?1, ?2, ?3, 1, ?4, ?4)
+            "INSERT INTO word_history (word, part_of_speech, definition_json, lookup_count, is_saved, first_looked_up, last_looked_up)
+             VALUES (?1, ?2, ?3, 1, 0, ?4, ?4)
              ON CONFLICT(word) DO UPDATE SET
                  lookup_count = lookup_count + 1,
                  last_looked_up = ?4;",
             params![def.word, def.part_of_speech, json_meanings, now],
         );
 
-        // Retrieve current count
+        // Retrieve current count and saved status
         conn.query_row(
-            "SELECT lookup_count FROM word_history WHERE word = ?1 COLLATE NOCASE",
+            "SELECT lookup_count, is_saved FROM word_history WHERE word = ?1 COLLATE NOCASE",
             params![def.word],
-            |row| row.get(0),
-        ).unwrap_or(1)
+            |row| Ok((row.get(0)?, row.get::<_, i32>(1)? != 0)),
+        ).unwrap_or((1, false))
     } else {
-        1
+        (1, false)
+    }
+}
+
+#[tauri::command]
+fn toggle_save_word(word: String) -> Result<bool, String> {
+    let clean = word.trim();
+    if clean.is_empty() {
+        return Err("Word cannot be empty".to_string());
+    }
+    let conn = get_user_db()?;
+    let exists: Option<i32> = conn
+        .query_row(
+            "SELECT is_saved FROM word_history WHERE word = ?1 COLLATE NOCASE",
+            params![clean],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    match exists {
+        Some(saved_int) => {
+            let new_state = saved_int == 0;
+            conn.execute(
+                "UPDATE word_history SET is_saved = ?1 WHERE word = ?2 COLLATE NOCASE",
+                params![if new_state { 1 } else { 0 }, clean],
+            ).map_err(|e| e.to_string())?;
+            Ok(new_state)
+        }
+        None => {
+            // If word isn't in word_history yet, look it up in dictionary and insert as saved
+            let def = lookup_word(clean.to_string())?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let json_meanings = serde_json::to_string(&def.meanings).unwrap_or_default();
+            conn.execute(
+                "INSERT INTO word_history (word, part_of_speech, definition_json, lookup_count, is_saved, first_looked_up, last_looked_up)
+                 VALUES (?1, ?2, ?3, 1, 1, ?4, ?4)",
+                params![def.word, def.part_of_speech, json_meanings, now],
+            ).map_err(|e| e.to_string())?;
+            Ok(true)
+        }
     }
 }
 
@@ -218,7 +269,7 @@ fn record_lookup(def: &Definition) -> u32 {
 fn get_word_history() -> Result<Vec<WordHistoryItem>, String> {
     let conn = get_user_db()?;
     let mut stmt = conn
-        .prepare("SELECT word, part_of_speech, definition_json, lookup_count, last_looked_up FROM word_history ORDER BY lookup_count DESC, last_looked_up DESC")
+        .prepare("SELECT word, part_of_speech, definition_json, lookup_count, is_saved, last_looked_up FROM word_history ORDER BY is_saved DESC, lookup_count DESC, last_looked_up DESC")
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
@@ -227,13 +278,15 @@ fn get_word_history() -> Result<Vec<WordHistoryItem>, String> {
             let pos: String = row.get(1)?;
             let json_str: String = row.get(2)?;
             let count: u32 = row.get(3)?;
-            let last: i64 = row.get(4)?;
+            let is_saved: bool = row.get::<_, i32>(4)? != 0;
+            let last: i64 = row.get(5)?;
             let meanings: Vec<String> = serde_json::from_str(&json_str).unwrap_or_default();
             Ok(WordHistoryItem {
                 word,
                 part_of_speech: pos,
                 meanings,
                 lookup_count: count,
+                is_saved,
                 last_looked_up: last,
             })
         })
@@ -281,6 +334,7 @@ fn lookup_word(word: String) -> Result<Definition, String> {
                     part_of_speech: pos,
                     meanings,
                     lookup_count: 1,
+                    is_saved: false,
                 })
             },
         )
@@ -308,8 +362,9 @@ fn lookup_word(word: String) -> Result<Definition, String> {
     }
 
     if let Some(ref mut def) = result {
-        let count = record_lookup(def);
+        let (count, is_saved) = record_lookup(def);
         def.lookup_count = count;
+        def.is_saved = is_saved;
     }
 
     println!("Lookup for '{}' took {:?}", clean_word, start.elapsed());
@@ -363,7 +418,8 @@ pub fn run() {
             hide_window,
             load_epub,
             get_word_history,
-            delete_history_word
+            delete_history_word,
+            toggle_save_word
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -399,6 +399,43 @@ input[type="range"] {
   margin-bottom: 8px;
 }
 
+.popup-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popup-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #e4e4e7;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.popup-save-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.popup-save-btn.saved {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.popup-save-btn.saved svg {
+  fill: #38bdf8;
+}
+
 .popup-title-group {
   display: flex;
   align-items: baseline;
@@ -475,6 +512,34 @@ input[type="range"] {
 
 .popup-count-badge:empty {
   display: none;
+}
+
+.wordbank-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.wordbank-tab {
+  flex: 1;
+  padding: 9px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wordbank-tab:hover {
+  color: #fafafa;
+}
+
+.wordbank-tab.active {
+  color: var(--text-accent);
+  border-bottom-color: var(--text-accent);
 }
 
 .wordbank-search-bar {
@@ -567,6 +632,38 @@ input[type="range"] {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   line-height: 1.4;
+}
+
+.wordbank-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wordbank-star-btn {
+  background: transparent;
+  border: none;
+  color: #52525b;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+}
+
+.wordbank-star-btn:hover {
+  color: #fbbf24;
+}
+
+.wordbank-star-btn.saved {
+  color: #38bdf8;
+}
+
+.wordbank-star-btn.saved svg {
+  fill: #38bdf8;
 }
 
 .wordbank-del-btn {
