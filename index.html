@@ -4,21 +4,49 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LookMeUp</title>
+    <title>LookMeUp Reader</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
   <body>
-    <div id="card" class="popup-card">
-      <div class="card-header">
-        <div class="title-group">
-          <span id="word-title" class="word">LookMeUp</span>
-          <span id="word-pos" class="pos-badge"></span>
+    <!-- Top Navigation Bar -->
+    <header class="reader-toolbar">
+      <div class="brand">
+        <span class="brand-title">LookMeUp</span>
+        <span class="badge">Offline</span>
+      </div>
+      <div class="actions">
+        <button id="open-btn" class="btn">Open EPUB</button>
+        <span id="book-title" class="book-status">Sample Reading Canvas</span>
+      </div>
+    </header>
+
+    <!-- Reading Canvas -->
+    <main class="reader-container">
+      <article id="reader-content" class="reader-content">
+        <h1>Chapter 1: The Art of Quiet Discovery</h1>
+        <p class="lead">
+          Reading on a touch screen should feel natural and effortless. In ancient libraries, scholars often experienced a sudden <mark class="demo-word">epiphany</mark> while examining forgotten manuscripts. They <mark class="demo-word">scored</mark> marks into the margins of thick vellum pages, seeking patterns in the text.
+        </p>
+        <p>
+          Such moments of pure <mark class="demo-word">serendipity</mark> are rare in our noisy digital world, where internet connections flicker and distractions are <mark class="demo-word">ubiquitous</mark>. Looking at an antique hourglass beside a modern smartphone seemed like an amusing <mark class="demo-word">anachronism</mark>, yet the bell's <mark class="demo-word">sonorous</mark> chime reminded them that deep comprehension is never <mark class="demo-word">ephemeral</mark>.
+        </p>
+        <p>
+          <em>Tip: Tap, double-tap, or drag your finger/mouse across any word above (or open an EPUB) to see the instant offline dictionary card float above it.</em>
+        </p>
+      </article>
+    </main>
+
+    <!-- Floating Definition Popup (Touch-Positioned) -->
+    <div id="popup-card" class="touch-popup hidden">
+      <div class="popup-arrow"></div>
+      <div class="popup-header">
+        <div class="popup-title-group">
+          <span id="popup-word" class="popup-word"></span>
+          <span id="popup-pos" class="popup-pos"></span>
         </div>
-        <button id="close-btn" class="close-btn" title="Dismiss (Esc)">&times;</button>
+        <button id="popup-close" class="popup-close-btn">&times;</button>
       </div>
-      <div id="card-body" class="card-body">
-        <p class="hint">Highlight a word in any app and press <kbd>Ctrl+Alt+D</kbd></p>
-      </div>
+      <div id="popup-body" class="popup-body"></div>
     </div>
   </body>
 </html>
