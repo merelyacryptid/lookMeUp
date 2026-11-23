@@ -5,6 +5,15 @@ interface Definition {
   word: string;
   part_of_speech: string;
   meanings: string[];
+  lookup_count: number;
+}
+
+interface WordHistoryItem {
+  word: string;
+  part_of_speech: string;
+  meanings: string[];
+  lookup_count: number;
+  last_looked_up: number;
 }
 
 interface EpubChapter {
@@ -40,9 +49,15 @@ const typoPopover = document.querySelector<HTMLElement>("#typo-popover")!;
 const chapterDrawer = document.querySelector<HTMLElement>("#chapter-drawer")!;
 const drawerClose = document.querySelector<HTMLElement>("#drawer-close")!;
 const drawerList = document.querySelector<HTMLElement>("#drawer-list")!;
+const wordbankBtn = document.querySelector<HTMLElement>("#wordbank-btn");
+const wordbankDrawer = document.querySelector<HTMLElement>("#wordbank-drawer")!;
+const wordbankClose = document.querySelector<HTMLElement>("#wordbank-close")!;
+const wordbankSearch = document.querySelector<HTMLInputElement>("#wordbank-search")!;
+const wordbankList = document.querySelector<HTMLElement>("#wordbank-list")!;
 const popupCard = document.querySelector<HTMLElement>("#popup-card")!;
 const popupWord = document.querySelector<HTMLElement>("#popup-word")!;
 const popupPos = document.querySelector<HTMLElement>("#popup-pos")!;
+const popupCount = document.querySelector<HTMLElement>("#popup-count")!;
 const popupBody = document.querySelector<HTMLElement>("#popup-body")!;
 const popupClose = document.querySelector<HTMLElement>("#popup-close")!;
 
@@ -145,6 +160,7 @@ function highlightActiveDrawerItem() {
 tocBtn?.addEventListener("click", () => {
   chapterDrawer.classList.toggle("hidden");
   typoPopover.classList.add("hidden");
+  wordbankDrawer.classList.add("hidden");
 });
 
 drawerClose?.addEventListener("click", () => {
@@ -232,6 +248,7 @@ resetTypoBtn.addEventListener("click", () => {
 typoBtn?.addEventListener("click", () => {
   typoPopover.classList.toggle("hidden");
   chapterDrawer.classList.add("hidden");
+  wordbankDrawer.classList.add("hidden");
 });
 
 // ----------------------------------------------------
@@ -248,6 +265,7 @@ window.addEventListener("keydown", (e) => {
     hidePopup();
     typoPopover.classList.add("hidden");
     chapterDrawer.classList.add("hidden");
+    wordbankDrawer.classList.add("hidden");
   }
 });
 
@@ -284,6 +302,7 @@ async function handleSelection() {
 
   popupWord.textContent = cleanWord;
   popupPos.textContent = "...";
+  popupCount.textContent = "";
   popupBody.innerHTML = `<p style="color:#71717a;margin:4px 0;">Searching offline dictionary...</p>`;
   popupCard.classList.remove("hidden");
 
@@ -291,6 +310,7 @@ async function handleSelection() {
     const def = await invoke<Definition>("lookup_word", { word: cleanWord });
     popupWord.textContent = def.word;
     popupPos.textContent = def.part_of_speech;
+    popupCount.textContent = `${def.lookup_count}x`;
     popupBody.innerHTML = `
       <ol>
         ${def.meanings.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}
@@ -298,12 +318,126 @@ async function handleSelection() {
     `;
   } catch (err) {
     popupPos.textContent = "";
+    popupCount.textContent = "";
     popupBody.innerHTML = `<p class="popup-error">${escapeHtml(String(err))}</p>`;
   }
 }
 
 document.addEventListener("pointerup", () => {
   setTimeout(handleSelection, 50);
+});
+
+// ----------------------------------------------------
+// 6. Word Bank & Lookup Frequency
+// ----------------------------------------------------
+let wordHistoryItems: WordHistoryItem[] = [];
+
+async function loadWordBank() {
+  try {
+    wordHistoryItems = await invoke<WordHistoryItem[]>("get_word_history");
+    renderWordBank(wordHistoryItems);
+  } catch (err) {
+    console.error("Failed to load word history:", err);
+    wordbankList.innerHTML = `<div class="wordbank-empty">Failed to load word history.</div>`;
+  }
+}
+
+function renderWordBank(items: WordHistoryItem[]) {
+  if (!items || items.length === 0) {
+    wordbankList.innerHTML = `
+      <div class="wordbank-empty">
+        No words saved yet.<br />
+        <small style="color:#52525b;margin-top:6px;display:block;">
+          Words you look up will automatically be tracked here with frequency counts.
+        </small>
+      </div>
+    `;
+    return;
+  }
+
+  wordbankList.innerHTML = "";
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "wordbank-card";
+
+    const firstMeaning = item.meanings && item.meanings.length > 0 ? item.meanings[0] : "";
+
+    card.innerHTML = `
+      <div class="wordbank-info">
+        <div class="wordbank-top">
+          <span class="wordbank-word">${escapeHtml(item.word)}</span>
+          <span class="wordbank-pos">${escapeHtml(item.part_of_speech)}</span>
+          <span class="wordbank-badge">${item.lookup_count}x</span>
+        </div>
+        <div class="wordbank-meaning">${escapeHtml(firstMeaning)}</div>
+      </div>
+      <button class="wordbank-del-btn" title="Delete from history">&times;</button>
+    `;
+
+    // Clicking card opens the dictionary popup in center view
+    card.querySelector(".wordbank-info")?.addEventListener("click", () => {
+      popupWord.textContent = item.word;
+      popupPos.textContent = item.part_of_speech;
+      popupCount.textContent = `${item.lookup_count}x`;
+      popupBody.innerHTML = `
+        <ol>
+          ${item.meanings.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}
+        </ol>
+      `;
+      popupCard.style.left = "340px";
+      popupCard.style.top = "100px";
+      popupCard.classList.remove("hidden");
+    });
+
+    // Delete handler
+    card.querySelector(".wordbank-del-btn")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await invoke("delete_history_word", { word: item.word });
+        wordHistoryItems = wordHistoryItems.filter((i) => i.word.toLowerCase() !== item.word.toLowerCase());
+        const query = wordbankSearch.value.toLowerCase().trim();
+        const filtered = query
+          ? wordHistoryItems.filter(
+              (i) =>
+                i.word.toLowerCase().includes(query) ||
+                i.meanings.some((m) => m.toLowerCase().includes(query))
+            )
+          : wordHistoryItems;
+        renderWordBank(filtered);
+      } catch (err) {
+        console.error("Failed to delete word:", err);
+      }
+    });
+
+    wordbankList.appendChild(card);
+  });
+}
+
+wordbankSearch.addEventListener("input", () => {
+  const query = wordbankSearch.value.toLowerCase().trim();
+  if (!query) {
+    renderWordBank(wordHistoryItems);
+  } else {
+    const filtered = wordHistoryItems.filter(
+      (i) =>
+        i.word.toLowerCase().includes(query) ||
+        i.meanings.some((m) => m.toLowerCase().includes(query))
+    );
+    renderWordBank(filtered);
+  }
+});
+
+wordbankBtn?.addEventListener("click", () => {
+  wordbankDrawer.classList.toggle("hidden");
+  chapterDrawer.classList.add("hidden");
+  typoPopover.classList.add("hidden");
+  if (!wordbankDrawer.classList.contains("hidden")) {
+    loadWordBank();
+  }
+});
+
+wordbankClose?.addEventListener("click", () => {
+  wordbankDrawer.classList.add("hidden");
 });
 
 function escapeHtml(str: string): string {

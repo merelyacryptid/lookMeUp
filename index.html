@@ -17,6 +17,7 @@
       <div class="actions">
         <button id="open-btn" class="btn" title="Open EPUB from disk">Open EPUB</button>
         <button id="toc-btn" class="btn" title="Table of Contents / Chapters">Chapters</button>
+        <button id="wordbank-btn" class="btn" title="Saved Words & Vocabulary Frequency">Word Bank</button>
         <button id="typo-btn" class="btn typo-btn" title="Text & Display Settings">Aa</button>
         <div class="divider"></div>
         <button id="prev-btn" class="btn nav-btn" disabled title="Previous Chapter">&larr;</button>
@@ -121,12 +122,25 @@
       <div id="drawer-list" class="drawer-list"></div>
     </aside>
 
+    <!-- Word Bank Drawer (Saved Vocabulary & Frequency) -->
+    <aside id="wordbank-drawer" class="chapter-drawer hidden">
+      <div class="drawer-header">
+        <span class="drawer-title">Word Bank</span>
+        <button id="wordbank-close" class="popup-close-btn">&times;</button>
+      </div>
+      <div class="wordbank-search-bar">
+        <input type="text" id="wordbank-search" class="wordbank-search-input" placeholder="Search saved words..." />
+      </div>
+      <div id="wordbank-list" class="wordbank-list"></div>
+    </aside>
+
     <!-- Floating Definition Popup (Touch-Positioned) -->
     <div id="popup-card" class="touch-popup hidden">
       <div class="popup-header">
         <div class="popup-title-group">
           <span id="popup-word" class="popup-word"></span>
           <span id="popup-pos" class="popup-pos"></span>
+          <span id="popup-count" class="popup-count-badge"></span>
         </div>
         <button id="popup-close" class="popup-close-btn">&times;</button>
       </div>

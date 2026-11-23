@@ -12,6 +12,8 @@ LookMeUp is built as a distraction-free, touch-friendly reading environment:
 * **Touch-Screen Friendly:** No keyboard needed. Tap, double-tap, or highlight any word on your touchscreen or with your mouse to instantly see its meaning.
 * **Single Unified Popup:** Because LookMeUp hosts the reading canvas, you get exactly one clean, beautiful dictionary bubble positioned directly over the tapped word.
 * **Instant Offline SQLite (<50 ms):** Directly queries a local, pre-indexed SQLite B-tree database with morphological lemma fallback (e.g. tapping "scored" routes to "score").
+* **Word Bank & Frequency Tracker:** Automatically tracks your vocabulary discoveries in local storage (`user_data.db`). See how many times you have encountered a word (`2x`, `3x`) and search through your personal Word Bank drawer anytime.
+* **Typography Controls & Image-Inlined EPUB Engine:** Native pure-Rust EPUB extractor that inlines book illustrations as Base64 Data URIs, complete with customizable font styles, text sizing, line/word/paragraph spacing, and text alignment.
 * **Complete Privacy:** 100% offline. Zero network calls, zero telemetry, zero accounts.
 
 ---
@@ -64,7 +66,10 @@ LookMeUp is built as a distraction-free, touch-friendly reading environment:
 - [x] **Phase 3: Global Shortcut & Text Capture** - System-wide hotkey listener (`Ctrl+Alt+D`) and active word capture.
 - [x] **Phase 4: Floating Cursor Popup** - Frameless, auto-positioning window at mouse cursor with blur/Esc auto-dismiss.
 - [x] **Phase 5: Full Wiktionary SQLite Pipeline** - Batch ingestion script for Kaikki.org English Wiktionary dataset with high-throughput pragmas.
-- [ ] **Phase 6: System Tray & Polish** - Background tray icon, saved words history, and production installer.
+- [x] **Phase 6.1: In-Reader EPUB Canvas & Typography** - Pure-Rust EPUB extraction, Base64 image inlining, Table of Contents, and typography controls.
+- [x] **Phase 6.2: Word Bank & Device-First Lookup Frequency** - Local SQLite vocabulary tracking (`user_data.db`), UPSERT counting, badges, and searchable Word Bank drawer.
+- [ ] **Phase 7: EPUB Library & Favorites Grid** - Local cover-art library grid, "Read" status, and favorites collection.
+- [ ] **Phase 8: Highlights & Annotations** - In-reader text highlighting and saved notes drawer.
 
 ---
 

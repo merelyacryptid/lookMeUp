@@ -157,6 +157,103 @@ pub struct Definition {
     pub word: String,
     pub part_of_speech: String,
     pub meanings: Vec<String>,
+    pub lookup_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WordHistoryItem {
+    pub word: String,
+    pub part_of_speech: String,
+    pub meanings: Vec<String>,
+    pub lookup_count: u32,
+    pub last_looked_up: i64,
+}
+
+fn get_user_db() -> Result<Connection, String> {
+    let conn = Connection::open("../user_data.db").map_err(|e| format!("Failed to open user DB: {}", e))?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS word_history (
+            word TEXT PRIMARY KEY COLLATE NOCASE,
+            part_of_speech TEXT NOT NULL,
+            definition_json TEXT NOT NULL,
+            lookup_count INTEGER NOT NULL DEFAULT 1,
+            first_looked_up INTEGER NOT NULL,
+            last_looked_up INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_word_history_count ON word_history(lookup_count DESC);
+        CREATE INDEX IF NOT EXISTS idx_word_history_last ON word_history(last_looked_up DESC);"
+    ).map_err(|e| format!("Failed to initialize word_history table: {}", e))?;
+    Ok(conn)
+}
+
+fn record_lookup(def: &Definition) -> u32 {
+    if let Ok(conn) = get_user_db() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let json_meanings = serde_json::to_string(&def.meanings).unwrap_or_default();
+
+        let _ = conn.execute(
+            "INSERT INTO word_history (word, part_of_speech, definition_json, lookup_count, first_looked_up, last_looked_up)
+             VALUES (?1, ?2, ?3, 1, ?4, ?4)
+             ON CONFLICT(word) DO UPDATE SET
+                 lookup_count = lookup_count + 1,
+                 last_looked_up = ?4;",
+            params![def.word, def.part_of_speech, json_meanings, now],
+        );
+
+        // Retrieve current count
+        conn.query_row(
+            "SELECT lookup_count FROM word_history WHERE word = ?1 COLLATE NOCASE",
+            params![def.word],
+            |row| row.get(0),
+        ).unwrap_or(1)
+    } else {
+        1
+    }
+}
+
+#[tauri::command]
+fn get_word_history() -> Result<Vec<WordHistoryItem>, String> {
+    let conn = get_user_db()?;
+    let mut stmt = conn
+        .prepare("SELECT word, part_of_speech, definition_json, lookup_count, last_looked_up FROM word_history ORDER BY lookup_count DESC, last_looked_up DESC")
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            let word: String = row.get(0)?;
+            let pos: String = row.get(1)?;
+            let json_str: String = row.get(2)?;
+            let count: u32 = row.get(3)?;
+            let last: i64 = row.get(4)?;
+            let meanings: Vec<String> = serde_json::from_str(&json_str).unwrap_or_default();
+            Ok(WordHistoryItem {
+                word,
+                part_of_speech: pos,
+                meanings,
+                lookup_count: count,
+                last_looked_up: last,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for r in rows {
+        if let Ok(item) = r {
+            result.push(item);
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn delete_history_word(word: String) -> Result<(), String> {
+    let conn = get_user_db()?;
+    conn.execute("DELETE FROM word_history WHERE word = ?1 COLLATE NOCASE", params![word])
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 #[tauri::command]
 fn lookup_word(word: String) -> Result<Definition, String> {
@@ -183,6 +280,7 @@ fn lookup_word(word: String) -> Result<Definition, String> {
                     word: w,
                     part_of_speech: pos,
                     meanings,
+                    lookup_count: 1,
                 })
             },
         )
@@ -207,6 +305,11 @@ fn lookup_word(word: String) -> Result<Definition, String> {
         if let Some(hw) = headword {
             result = fetch_entry(&hw)?;
         }
+    }
+
+    if let Some(ref mut def) = result {
+        let count = record_lookup(def);
+        def.lookup_count = count;
     }
 
     println!("Lookup for '{}' took {:?}", clean_word, start.elapsed());
@@ -255,7 +358,13 @@ pub fn run() {
                 })?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![lookup_word, hide_window, load_epub])
+        .invoke_handler(tauri::generate_handler![
+            lookup_word,
+            hide_window,
+            load_epub,
+            get_word_history,
+            delete_history_word
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
