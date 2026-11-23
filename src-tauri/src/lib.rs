@@ -1,6 +1,9 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::time::Instant;
@@ -18,6 +21,7 @@ pub struct EpubChapter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EpubBook {
     pub title: String,
+    pub cover_data: Option<String>,
     pub chapters: Vec<EpubChapter>,
 }
 
@@ -32,6 +36,49 @@ fn load_epub(path: String) -> Result<EpubBook, String> {
         .unwrap_or("Untitled Book")
         .to_string();
 
+    // 1. Extract all images and convert to Base64 Data URIs
+    let mut image_map: HashMap<String, String> = HashMap::new();
+    let mut cover_data: Option<String> = None;
+
+    for i in 0..archive.len() {
+        if let Ok(mut entry) = archive.by_index(i) {
+            let name = entry.name().to_string();
+            let lower = name.to_lowercase();
+            let mime = if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+                Some("image/jpeg")
+            } else if lower.ends_with(".png") {
+                Some("image/png")
+            } else if lower.ends_with(".gif") {
+                Some("image/gif")
+            } else if lower.ends_with(".webp") {
+                Some("image/webp")
+            } else if lower.ends_with(".svg") {
+                Some("image/svg+xml")
+            } else {
+                None
+            };
+
+            if let Some(mime_type) = mime {
+                let mut bytes = Vec::new();
+                if entry.read_to_end(&mut bytes).is_ok() {
+                    let b64 = BASE64_STANDARD.encode(&bytes);
+                    let data_uri = format!("data:{};base64,{}", mime_type, b64);
+
+                    // Check for cover image candidate
+                    if cover_data.is_none() && (lower.contains("cover") || lower.contains("titlepage")) {
+                        cover_data = Some(data_uri.clone());
+                    }
+
+                    // Map by both full archive path and basename
+                    let basename = name.split('/').last().unwrap_or(&name).to_string();
+                    image_map.insert(name.clone(), data_uri.clone());
+                    image_map.insert(basename, data_uri);
+                }
+            }
+        }
+    }
+
+    // 2. Discover chapter files
     let mut chapter_names: Vec<String> = Vec::new();
     for i in 0..archive.len() {
         if let Ok(entry) = archive.by_index(i) {
@@ -47,12 +94,14 @@ fn load_epub(path: String) -> Result<EpubBook, String> {
 
     chapter_names.sort();
 
+    // 3. Extract and inline images into chapter bodies
     let mut chapters = Vec::new();
     for (idx, name) in chapter_names.iter().enumerate() {
         if let Ok(mut entry) = archive.by_name(name) {
             let mut raw_html = String::new();
             if entry.read_to_string(&mut raw_html).is_ok() {
-                let body_content = if let Some(start) = raw_html.find("<body") {
+                // Extract <body> content if present
+                let mut body_content = if let Some(start) = raw_html.find("<body") {
                     if let Some(inner_start) = raw_html[start..].find('>') {
                         let after_body = &raw_html[start + inner_start + 1..];
                         if let Some(end) = after_body.rfind("</body>") {
@@ -66,6 +115,23 @@ fn load_epub(path: String) -> Result<EpubBook, String> {
                 } else {
                     raw_html
                 };
+
+                // Replace image references with embedded Base64 data URIs
+                for (img_key, data_uri) in &image_map {
+                    // Match variations like src="images/pic.jpg", src="../images/pic.jpg", xlink:href="..."
+                    let patterns = [
+                        format!("src=\"{}\"", img_key),
+                        format!("src='{}'", img_key),
+                        format!("href=\"{}\"", img_key),
+                        format!("href='{}'", img_key),
+                    ];
+                    for pat in &patterns {
+                        if body_content.contains(pat) {
+                            let replacement = format!("src=\"{}\"", data_uri);
+                            body_content = body_content.replace(pat, &replacement);
+                        }
+                    }
+                }
 
                 chapters.push(EpubChapter {
                     title: format!("Chapter {}", idx + 1),
@@ -81,6 +147,7 @@ fn load_epub(path: String) -> Result<EpubBook, String> {
 
     Ok(EpubBook {
         title: book_title,
+        cover_data,
         chapters,
     })
 }
