@@ -89,3 +89,9 @@ notes:
 * **What we did:** Reset `tauri.conf.json` to a standard full desktop reader window (`1024x720`, decorated, visible). Implemented an in-reader canvas with comfortable typography, integrated word selection capture via `pointerup` and `window.getSelection()`, and positioned an inline floating dictionary card directly above the tapped word using `range.getBoundingClientRect()`.
 * **Key Concept:** Direct-manipulation touch UX vs. global shortcut collision. When reading in external apps, competing selection bubbles overlap and touchscreens lack physical keyboards. Hosting the reading canvas directly gives LookMeUp 100% control over the DOM: zero competing popups, touch/tap-friendly selection without hotkeys, and pixel-perfect relative positioning above the selected word.
 * **Gotcha:** Windows file locking (`os error 32: ERROR_SHARING_VIOLATION`). On Windows, running binaries cannot be overwritten by the linker. If `tauri dev` or `app.exe` is running when Cargo attempts to link, the build fails with a sharing violation until the running process is stopped.
+
+
+## Step 5.3: Window Label Binding & Dialog Permission Resolution
+* **What we did:** Added explicit `"label": "main"` to the reader window in `src-tauri/tauri.conf.json` and wrapped the frontend file picker in `try/catch` with user-facing error reporting in `src/main.ts`.
+* **Key Concept:** Capability targeting in Tauri v2. In `capabilities/default.json`, permissions (such as `"dialog:default"`) are bound to specific window labels (`"windows": ["main"]`). If a window definition in `tauri.conf.json` omits the `"label"` property, capability binding fails to match the window, causing API calls like `open()` to be rejected silently at runtime.
+* **Gotcha:** Always ensure the window `label` in `tauri.conf.json` matches the strings in `capabilities/*.json` windows array, and always wrap asynchronous plugin promises in `try/catch` blocks in TypeScript to prevent unhandled rejection silence.

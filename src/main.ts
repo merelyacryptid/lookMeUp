@@ -93,15 +93,20 @@ document.addEventListener("pointerup", () => {
 
 // Native Open File Dialog for EPUBs
 openBtn?.addEventListener("click", async () => {
-  const selected = await open({
-    multiple: false,
-    filters: [{ name: "EPUB Documents", extensions: ["epub"] }],
-  });
+  try {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "EPUB Documents", extensions: ["epub"] }],
+    });
 
-  if (selected && bookTitleEl) {
-    const pathStr = Array.isArray(selected) ? selected[0] : selected;
-    const fileName = pathStr.split(/[/\\]/).pop() || pathStr;
-    bookTitleEl.textContent = `Reading: ${fileName}`;
+    if (selected && bookTitleEl) {
+      const pathStr = Array.isArray(selected) ? selected[0] : selected;
+      const fileName = pathStr.split(/[/\\]/).pop() || pathStr;
+      bookTitleEl.textContent = `Reading: ${fileName}`;
+    }
+  } catch (err) {
+    console.error("Open dialog error:", err);
+    alert(`Could not open file picker: ${err}`);
   }
 });
 
