@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# User data & data pipeline cache
+user_data.db
+scripts/*.jsonl.gz
+*.db.tmp
