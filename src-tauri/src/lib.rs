@@ -9,8 +9,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[cfg(target_os = "windows")]
-fn simulate_ctrl_c() {
-    unsafe extern "system" {
+unsafe fn simulate_ctrl_c() {
+    extern "system" {
         fn keybd_event(bVk: u8, bScan: u8, dwFlags: u32, dwExtraInfo: usize);
     }
     const VK_CONTROL: u8 = 0x11;
@@ -20,13 +20,11 @@ fn simulate_ctrl_c() {
     // Small delay to allow user to release trigger keys
     std::thread::sleep(std::time::Duration::from_millis(40));
 
-    unsafe {
-        // Send Ctrl + C
-        keybd_event(VK_CONTROL, 0, 0, 0);
-        keybd_event(VK_C, 0, 0, 0);
-        keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0);
-        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-    }
+    // Send Ctrl + C
+    keybd_event(VK_CONTROL, 0, 0, 0);
+    keybd_event(VK_C, 0, 0, 0);
+    keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
 
     // Wait for target application to populate clipboard
     std::thread::sleep(std::time::Duration::from_millis(70));
@@ -52,7 +50,8 @@ pub struct WordHistoryItem {
 }
 
 fn get_user_db() -> Result<Connection, String> {
-    let conn = Connection::open("../user_data.db").map_err(|e| format!("Failed to open user DB: {}", e))?;
+    let conn = Connection::open("../user_data.db")
+        .map_err(|e| format!("Failed to open user DB: {}", e))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS word_history (
             word TEXT PRIMARY KEY COLLATE NOCASE,
@@ -75,7 +74,10 @@ fn get_user_db() -> Result<Connection, String> {
     ).map_err(|e| format!("Failed to initialize user tables: {}", e))?;
 
     // Safe migration if table previously existed without is_saved column
-    let _ = conn.execute("ALTER TABLE word_history ADD COLUMN is_saved INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute(
+        "ALTER TABLE word_history ADD COLUMN is_saved INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
 
     Ok(conn)
 }
@@ -86,7 +88,8 @@ fn get_saved_hotkey() -> String {
             "SELECT value FROM app_settings WHERE key = 'hotkey'",
             [],
             |row| row.get(0),
-        ).unwrap_or_else(|_| "ctrl+alt+d".to_string())
+        )
+        .unwrap_or_else(|_| "ctrl+alt+d".to_string())
     } else {
         "ctrl+alt+d".to_string()
     }
@@ -98,7 +101,8 @@ fn save_hotkey(hotkey: &str) -> Result<(), String> {
         "INSERT INTO app_settings (key, value) VALUES ('hotkey', ?1)
          ON CONFLICT(key) DO UPDATE SET value = ?1;",
         params![hotkey],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -124,7 +128,8 @@ fn record_lookup(def: &Definition) -> (u32, bool) {
             "SELECT lookup_count, is_saved FROM word_history WHERE word = ?1 COLLATE NOCASE",
             params![def.word],
             |row| Ok((row.get(0)?, row.get::<_, i32>(1)? != 0)),
-        ).unwrap_or((1, false))
+        )
+        .unwrap_or((1, false))
     } else {
         (1, false)
     }
@@ -152,7 +157,8 @@ fn toggle_save_word(word: String) -> Result<bool, String> {
             conn.execute(
                 "UPDATE word_history SET is_saved = ?1 WHERE word = ?2 COLLATE NOCASE",
                 params![if new_state { 1 } else { 0 }, clean],
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
             Ok(new_state)
         }
         None => {
@@ -211,8 +217,11 @@ fn get_word_history() -> Result<Vec<WordHistoryItem>, String> {
 #[tauri::command]
 fn delete_history_word(word: String) -> Result<(), String> {
     let conn = get_user_db()?;
-    conn.execute("DELETE FROM word_history WHERE word = ?1 COLLATE NOCASE", params![word])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM word_history WHERE word = ?1 COLLATE NOCASE",
+        params![word],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -287,7 +296,9 @@ fn get_current_hotkey() -> String {
 #[tauri::command]
 fn set_current_hotkey(app: tauri::AppHandle, new_hotkey: String) -> Result<String, String> {
     let clean = new_hotkey.trim().to_lowercase();
-    let new_shortcut: Shortcut = clean.parse().map_err(|e| format!("Invalid shortcut: {:?}", e))?;
+    let new_shortcut: Shortcut = clean
+        .parse()
+        .map_err(|e| format!("Invalid shortcut: {:?}", e))?;
 
     let old_key = get_saved_hotkey();
     if let Ok(old_shortcut) = old_key.parse::<Shortcut>() {
@@ -331,7 +342,9 @@ fn hide_window(window: tauri::WebviewWindow) {
 
 fn handle_hotkey_trigger(app: &tauri::AppHandle) {
     #[cfg(target_os = "windows")]
-    simulate_ctrl_c();
+    unsafe {
+        simulate_ctrl_c();
+    }
 
     if let Some(window) = app.get_webview_window("main") {
         // Position window near cursor
@@ -378,17 +391,22 @@ pub fn run() {
         .setup(|app| {
             // 1. Register saved or default global shortcut
             let saved_key = get_saved_hotkey();
-            let shortcut: Shortcut = saved_key.parse().unwrap_or_else(|_| "ctrl+alt+d".parse().unwrap());
+            let shortcut: Shortcut = saved_key
+                .parse()
+                .unwrap_or_else(|_| "ctrl+alt+d".parse().unwrap());
             let app_handle = app.handle().clone();
-            let _ = app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
-                if event.state() == ShortcutState::Pressed {
-                    handle_hotkey_trigger(&app_handle);
-                }
-            });
+            let _ = app
+                .global_shortcut()
+                .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        handle_hotkey_trigger(&app_handle);
+                    }
+                });
 
             // 2. Build System Tray
             let lookup_i = MenuItemBuilder::with_id("lookup", "Look Up Word...").build(app)?;
-            let wordbank_i = MenuItemBuilder::with_id("wordbank", "Word Bank & Saved Words").build(app)?;
+            let wordbank_i =
+                MenuItemBuilder::with_id("wordbank", "Word Bank & Saved Words").build(app)?;
             let quit_i = MenuItemBuilder::with_id("quit", "Quit LookMeUp").build(app)?;
             let menu = MenuBuilder::new(app)
                 .items(&[&lookup_i, &wordbank_i, &quit_i])

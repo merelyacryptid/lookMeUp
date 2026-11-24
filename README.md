@@ -105,6 +105,9 @@ python scripts/build_full_db.py
 - [x] **Phase 6.2: Configurable Global Hotkey** - SQLite settings persistence and dynamic runtime shortcut re-registration via Settings UI and System Tray.
 - [x] **Phase 6.3: System Tray Resident & Auto-Dismiss** - Runs silently in the Windows system tray with left-click toggle, right-click context menu, and blur/Esc auto-dismissal.
 - [x] **Phase 6.4: Word Bank, Frequency Badges, & Saved Words** - Local vocabulary management in `user_data.db`, UPSERT tracking, "All Lookups" vs. "Saved Words" filter tabs, and frequency badges (`2x`, `3x`).
+- [ ] **Phase 7: Offline Text-to-Speech & IPA Phonetics** - In-popup pronunciation guide and native OS speech synthesis audio.
+- [ ] **Phase 8: Anki & Flashcard Export** - One-click export of saved words and definitions into Anki decks and CSV format for spaced repetition.
+- [ ] **Phase 9: Production Packaging & Windows Installer** - Standalone NSIS / MSI installer with auto-start on boot option.
 
 ---
 
