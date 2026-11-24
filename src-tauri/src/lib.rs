@@ -1,155 +1,35 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use base64::Engine;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::time::Instant;
-use tauri::{Emitter, Manager, PhysicalPosition, Position};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-use zip::ZipArchive;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpubChapter {
-    pub title: String,
-    pub content: String,
-}
+#[cfg(target_os = "windows")]
+fn simulate_ctrl_c() {
+    unsafe extern "system" {
+        fn keybd_event(bVk: u8, bScan: u8, dwFlags: u32, dwExtraInfo: usize);
+    }
+    const VK_CONTROL: u8 = 0x11;
+    const VK_C: u8 = 0x43;
+    const KEYEVENTF_KEYUP: u32 = 0x0002;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpubBook {
-    pub title: String,
-    pub cover_data: Option<String>,
-    pub chapters: Vec<EpubChapter>,
-}
+    // Small delay to allow user to release trigger keys
+    std::thread::sleep(std::time::Duration::from_millis(40));
 
-#[tauri::command]
-fn load_epub(path: String) -> Result<EpubBook, String> {
-    let file = File::open(&path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut archive = ZipArchive::new(file).map_err(|e| format!("Failed to read EPUB zip archive: {}", e))?;
-
-    let book_title = std::path::Path::new(&path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Untitled Book")
-        .to_string();
-
-    // 1. Extract all images and convert to Base64 Data URIs
-    let mut image_map: HashMap<String, String> = HashMap::new();
-    let mut cover_data: Option<String> = None;
-
-    for i in 0..archive.len() {
-        if let Ok(mut entry) = archive.by_index(i) {
-            let name = entry.name().to_string();
-            let lower = name.to_lowercase();
-            let mime = if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
-                Some("image/jpeg")
-            } else if lower.ends_with(".png") {
-                Some("image/png")
-            } else if lower.ends_with(".gif") {
-                Some("image/gif")
-            } else if lower.ends_with(".webp") {
-                Some("image/webp")
-            } else if lower.ends_with(".svg") {
-                Some("image/svg+xml")
-            } else {
-                None
-            };
-
-            if let Some(mime_type) = mime {
-                let mut bytes = Vec::new();
-                if entry.read_to_end(&mut bytes).is_ok() {
-                    let b64 = BASE64_STANDARD.encode(&bytes);
-                    let data_uri = format!("data:{};base64,{}", mime_type, b64);
-
-                    // Check for cover image candidate
-                    if cover_data.is_none() && (lower.contains("cover") || lower.contains("titlepage")) {
-                        cover_data = Some(data_uri.clone());
-                    }
-
-                    // Map by both full archive path and basename
-                    let basename = name.split('/').last().unwrap_or(&name).to_string();
-                    image_map.insert(name.clone(), data_uri.clone());
-                    image_map.insert(basename, data_uri);
-                }
-            }
-        }
+    unsafe {
+        // Send Ctrl + C
+        keybd_event(VK_CONTROL, 0, 0, 0);
+        keybd_event(VK_C, 0, 0, 0);
+        keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
     }
 
-    // 2. Discover chapter files
-    let mut chapter_names: Vec<String> = Vec::new();
-    for i in 0..archive.len() {
-        if let Ok(entry) = archive.by_index(i) {
-            let name = entry.name().to_string();
-            let lower = name.to_lowercase();
-            if (lower.ends_with(".xhtml") || lower.ends_with(".html") || lower.ends_with(".htm"))
-                && !lower.contains("nav.") && !lower.contains("toc.")
-            {
-                chapter_names.push(name);
-            }
-        }
-    }
-
-    chapter_names.sort();
-
-    // 3. Extract and inline images into chapter bodies
-    let mut chapters = Vec::new();
-    for (idx, name) in chapter_names.iter().enumerate() {
-        if let Ok(mut entry) = archive.by_name(name) {
-            let mut raw_html = String::new();
-            if entry.read_to_string(&mut raw_html).is_ok() {
-                // Extract <body> content if present
-                let mut body_content = if let Some(start) = raw_html.find("<body") {
-                    if let Some(inner_start) = raw_html[start..].find('>') {
-                        let after_body = &raw_html[start + inner_start + 1..];
-                        if let Some(end) = after_body.rfind("</body>") {
-                            after_body[..end].to_string()
-                        } else {
-                            after_body.to_string()
-                        }
-                    } else {
-                        raw_html
-                    }
-                } else {
-                    raw_html
-                };
-
-                // Replace image references with embedded Base64 data URIs
-                for (img_key, data_uri) in &image_map {
-                    // Match variations like src="images/pic.jpg", src="../images/pic.jpg", xlink:href="..."
-                    let patterns = [
-                        format!("src=\"{}\"", img_key),
-                        format!("src='{}'", img_key),
-                        format!("href=\"{}\"", img_key),
-                        format!("href='{}'", img_key),
-                    ];
-                    for pat in &patterns {
-                        if body_content.contains(pat) {
-                            let replacement = format!("src=\"{}\"", data_uri);
-                            body_content = body_content.replace(pat, &replacement);
-                        }
-                    }
-                }
-
-                chapters.push(EpubChapter {
-                    title: format!("Chapter {}", idx + 1),
-                    content: body_content,
-                });
-            }
-        }
-    }
-
-    if chapters.is_empty() {
-        return Err("No readable chapters found in this EPUB file.".to_string());
-    }
-
-    Ok(EpubBook {
-        title: book_title,
-        cover_data,
-        chapters,
-    })
+    // Wait for target application to populate clipboard
+    std::thread::sleep(std::time::Duration::from_millis(70));
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,13 +65,41 @@ fn get_user_db() -> Result<Connection, String> {
         );
         CREATE INDEX IF NOT EXISTS idx_word_history_saved ON word_history(is_saved, lookup_count DESC);
         CREATE INDEX IF NOT EXISTS idx_word_history_count ON word_history(lookup_count DESC);
-        CREATE INDEX IF NOT EXISTS idx_word_history_last ON word_history(last_looked_up DESC);"
-    ).map_err(|e| format!("Failed to initialize word_history table: {}", e))?;
+        CREATE INDEX IF NOT EXISTS idx_word_history_last ON word_history(last_looked_up DESC);
+
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('hotkey', 'ctrl+alt+d');"
+    ).map_err(|e| format!("Failed to initialize user tables: {}", e))?;
 
     // Safe migration if table previously existed without is_saved column
     let _ = conn.execute("ALTER TABLE word_history ADD COLUMN is_saved INTEGER NOT NULL DEFAULT 0", []);
 
     Ok(conn)
+}
+
+fn get_saved_hotkey() -> String {
+    if let Ok(conn) = get_user_db() {
+        conn.query_row(
+            "SELECT value FROM app_settings WHERE key = 'hotkey'",
+            [],
+            |row| row.get(0),
+        ).unwrap_or_else(|_| "ctrl+alt+d".to_string())
+    } else {
+        "ctrl+alt+d".to_string()
+    }
+}
+
+fn save_hotkey(hotkey: &str) -> Result<(), String> {
+    let conn = get_user_db()?;
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('hotkey', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1;",
+        params![hotkey],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn record_lookup(def: &Definition) -> (u32, bool) {
@@ -248,7 +156,6 @@ fn toggle_save_word(word: String) -> Result<bool, String> {
             Ok(new_state)
         }
         None => {
-            // If word isn't in word_history yet, look it up in dictionary and insert as saved
             let def = lookup_word(clean.to_string())?;
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -308,6 +215,7 @@ fn delete_history_word(word: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
 #[tauri::command]
 fn lookup_word(word: String) -> Result<Definition, String> {
     let start = Instant::now();
@@ -319,7 +227,6 @@ fn lookup_word(word: String) -> Result<Definition, String> {
     let conn =
         Connection::open("../dictionary.db").map_err(|e| format!("Failed to open DB: {}", e))?;
 
-    // Helper to fetch an entry by headword
     let fetch_entry = |target: &str| -> Result<Option<Definition>, String> {
         conn.query_row(
             "SELECT word, part_of_speech, meanings FROM entries WHERE word = ?1 COLLATE NOCASE",
@@ -373,8 +280,92 @@ fn lookup_word(word: String) -> Result<Definition, String> {
 }
 
 #[tauri::command]
+fn get_current_hotkey() -> String {
+    get_saved_hotkey()
+}
+
+#[tauri::command]
+fn set_current_hotkey(app: tauri::AppHandle, new_hotkey: String) -> Result<String, String> {
+    let clean = new_hotkey.trim().to_lowercase();
+    let new_shortcut: Shortcut = clean.parse().map_err(|e| format!("Invalid shortcut: {:?}", e))?;
+
+    let old_key = get_saved_hotkey();
+    if let Ok(old_shortcut) = old_key.parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(old_shortcut);
+    }
+
+    let app_handle = app.clone();
+    app.global_shortcut()
+        .on_shortcut(new_shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                handle_hotkey_trigger(&app_handle);
+            }
+        })
+        .map_err(|e| format!("Failed to register shortcut '{}': {:?}", clean, e))?;
+
+    save_hotkey(&clean)?;
+    Ok(clean)
+}
+
+#[tauri::command]
+fn resize_window(window: tauri::WebviewWindow, expanded: bool) -> Result<(), String> {
+    if expanded {
+        let _ = window.set_size(Size::Logical(LogicalSize {
+            width: 720.0,
+            height: 520.0,
+        }));
+        let _ = window.center();
+    } else {
+        let _ = window.set_size(Size::Logical(LogicalSize {
+            width: 380.0,
+            height: 340.0,
+        }));
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
+}
+
+fn handle_hotkey_trigger(app: &tauri::AppHandle) {
+    #[cfg(target_os = "windows")]
+    simulate_ctrl_c();
+
+    if let Some(window) = app.get_webview_window("main") {
+        // Position window near cursor
+        if let Ok(pos) = app.cursor_position() {
+            let x = (pos.x as i32 + 12).max(10);
+            let y = (pos.y as i32 + 12).max(10);
+            let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+        }
+
+        // Read text from clipboard
+        let captured = if let Ok(text) = app.clipboard().read_text() {
+            text.trim().to_string()
+        } else {
+            String::new()
+        };
+
+        // Extract first clean word
+        let clean_word = captured
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '\'')
+            .to_string();
+
+        let payload = if !clean_word.is_empty() && clean_word.len() <= 40 {
+            lookup_word(clean_word)
+        } else {
+            Err("No word selected. Type a word below:".to_string())
+        };
+
+        let _ = window.emit("show-definition", payload);
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -385,41 +376,89 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
-            let shortcut: Shortcut = "ctrl+alt+d".parse().map_err(|e| format!("{:?}", e))?;
-            app.global_shortcut()
-                .on_shortcut(shortcut, |app, _shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
+            // 1. Register saved or default global shortcut
+            let saved_key = get_saved_hotkey();
+            let shortcut: Shortcut = saved_key.parse().unwrap_or_else(|_| "ctrl+alt+d".parse().unwrap());
+            let app_handle = app.handle().clone();
+            let _ = app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    handle_hotkey_trigger(&app_handle);
+                }
+            });
+
+            // 2. Build System Tray
+            let lookup_i = MenuItemBuilder::with_id("lookup", "Look Up Word...").build(app)?;
+            let wordbank_i = MenuItemBuilder::with_id("wordbank", "Word Bank & Saved Words").build(app)?;
+            let quit_i = MenuItemBuilder::with_id("quit", "Quit LookMeUp").build(app)?;
+            let menu = MenuBuilder::new(app)
+                .items(&[&lookup_i, &wordbank_i, &quit_i])
+                .build()?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    "wordbank" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            // 1. Position near mouse cursor
-                            if let Ok(pos) = app.cursor_position() {
-                                let _ = window.set_position(Position::Physical(PhysicalPosition {
-                                    x: pos.x as i32 + 12,
-                                    y: pos.y as i32 + 12,
-                                }));
-                            }
-
-                            // 2. Read clipboard and query SQLite
-                            if let Ok(text) = app.clipboard().read_text() {
-                                let trimmed = text.trim();
-                                let payload = lookup_word(trimmed.to_string());
-                                let _ = window.emit("show-definition", payload);
-                            }
-
-                            // 3. Reveal and focus popup
+                            let _ = window.emit("open-wordbank", ());
+                            let _ = window.set_size(Size::Logical(LogicalSize {
+                                width: 720.0,
+                                height: 520.0,
+                            }));
+                            let _ = window.center();
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
                     }
-                })?;
+                    "lookup" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("open-search", ());
+                            let _ = window.set_size(Size::Logical(LogicalSize {
+                                width: 380.0,
+                                height: 340.0,
+                            }));
+                            let _ = window.center();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             lookup_word,
             hide_window,
-            load_epub,
             get_word_history,
             delete_history_word,
-            toggle_save_word
+            toggle_save_word,
+            get_current_hotkey,
+            set_current_hotkey,
+            resize_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

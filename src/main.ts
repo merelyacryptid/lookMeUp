@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 
 interface Definition {
   word: string;
@@ -18,277 +18,83 @@ interface WordHistoryItem {
   last_looked_up: number;
 }
 
-interface EpubChapter {
-  title: string;
-  content: string;
-}
+type LookupPayload = { Ok: Definition } | { Err: string };
 
-interface EpubBook {
-  title: string;
-  cover_data: string | null;
-  chapters: EpubChapter[];
-}
-
-// State
-let currentBook: EpubBook | null = null;
-let currentChapterIdx = 0;
-let activePopupWord = "";
+// App State
+let activeWord = "";
+let isExpanded = false;
 let wordbankFilter: "all" | "saved" = "all";
+let wordHistoryItems: WordHistoryItem[] = [];
 
-// DOM Elements
-const readerScrollContainer = document.querySelector<HTMLElement>("#reader-scroll-container")!;
-const readerContent = document.querySelector<HTMLElement>("#reader-content")!;
-const openBtn = document.querySelector<HTMLElement>("#open-btn");
-const tocBtn = document.querySelector<HTMLElement>("#toc-btn");
-const typoBtn = document.querySelector<HTMLElement>("#typo-btn");
-const prevBtn = document.querySelector<HTMLButtonElement>("#prev-btn");
-const nextBtn = document.querySelector<HTMLButtonElement>("#next-btn");
-const chapterLabel = document.querySelector<HTMLElement>("#chapter-label");
-const bookTitleFooter = document.querySelector<HTMLElement>("#book-title-footer");
-const progressBar = document.querySelector<HTMLElement>("#progress-bar");
-const progressText = document.querySelector<HTMLElement>("#progress-text");
-
-// Popups & Drawers
-const typoPopover = document.querySelector<HTMLElement>("#typo-popover")!;
-const chapterDrawer = document.querySelector<HTMLElement>("#chapter-drawer")!;
-const drawerClose = document.querySelector<HTMLElement>("#drawer-close")!;
-const drawerList = document.querySelector<HTMLElement>("#drawer-list")!;
-const wordbankBtn = document.querySelector<HTMLElement>("#wordbank-btn");
-const wordbankDrawer = document.querySelector<HTMLElement>("#wordbank-drawer")!;
-const wordbankClose = document.querySelector<HTMLElement>("#wordbank-close")!;
-const wordbankSearch = document.querySelector<HTMLInputElement>("#wordbank-search")!;
-const wordbankList = document.querySelector<HTMLElement>("#wordbank-list")!;
-const wordbankTabAll = document.querySelector<HTMLButtonElement>("#wordbank-tab-all")!;
-const wordbankTabSaved = document.querySelector<HTMLButtonElement>("#wordbank-tab-saved")!;
-const countAll = document.querySelector<HTMLElement>("#count-all")!;
-const countSaved = document.querySelector<HTMLElement>("#count-saved")!;
-const popupCard = document.querySelector<HTMLElement>("#popup-card")!;
+// DOM Elements - Compact Popup
+const popupView = document.querySelector<HTMLElement>("#popup-view")!;
+const companionSearch = document.querySelector<HTMLInputElement>("#companion-search")!;
+const btnOpenWordbank = document.querySelector<HTMLButtonElement>("#btn-open-wordbank")!;
+const btnClosePopup = document.querySelector<HTMLButtonElement>("#btn-close-popup")!;
 const popupWord = document.querySelector<HTMLElement>("#popup-word")!;
 const popupPos = document.querySelector<HTMLElement>("#popup-pos")!;
 const popupCount = document.querySelector<HTMLElement>("#popup-count")!;
 const popupSaveBtn = document.querySelector<HTMLButtonElement>("#popup-save-btn")!;
 const popupSaveText = document.querySelector<HTMLElement>("#popup-save-text")!;
 const popupBody = document.querySelector<HTMLElement>("#popup-body")!;
-const popupClose = document.querySelector<HTMLElement>("#popup-close")!;
+const hintHotkey = document.querySelector<HTMLElement>("#hint-hotkey")!;
+const footerHotkeyPill = document.querySelector<HTMLElement>("#footer-hotkey-pill")!;
+
+// DOM Elements - Expanded Word Bank & Settings
+const wordbankView = document.querySelector<HTMLElement>("#wordbank-view")!;
+const btnBackToPopup = document.querySelector<HTMLButtonElement>("#btn-back-to-popup")!;
+const btnCloseWordbank = document.querySelector<HTMLButtonElement>("#btn-close-wordbank")!;
+const tabAll = document.querySelector<HTMLButtonElement>("#tab-all")!;
+const tabSaved = document.querySelector<HTMLButtonElement>("#tab-saved")!;
+const tabSettings = document.querySelector<HTMLButtonElement>("#tab-settings")!;
+const paneVocabulary = document.querySelector<HTMLElement>("#pane-vocabulary")!;
+const paneSettings = document.querySelector<HTMLElement>("#pane-settings")!;
+const statAllCount = document.querySelector<HTMLElement>("#stat-all-count")!;
+const statSavedCount = document.querySelector<HTMLElement>("#stat-saved-count")!;
+const wordbankFilterInput = document.querySelector<HTMLInputElement>("#wordbank-filter-input")!;
+const wordbankItemsList = document.querySelector<HTMLElement>("#wordbank-items-list")!;
+
+// Settings Elements
+const activeHotkeyDisplay = document.querySelector<HTMLElement>("#active-hotkey-display")!;
+const presetButtons = document.querySelectorAll<HTMLButtonElement>(".preset-btn");
+const customHotkeyInput = document.querySelector<HTMLInputElement>("#custom-hotkey-input")!;
+const btnApplyHotkey = document.querySelector<HTMLButtonElement>("#btn-apply-hotkey")!;
+const hotkeyStatusMsg = document.querySelector<HTMLElement>("#hotkey-status-msg")!;
 
 // ----------------------------------------------------
-// 1. Chapter Rendering & Pagination
+// 1. Definition Display
 // ----------------------------------------------------
-function renderChapter(idx: number) {
-  if (!currentBook || !currentBook.chapters[idx]) return;
-  currentChapterIdx = idx;
+function showDefinition(def: Definition) {
+  activeWord = def.word;
+  companionSearch.value = def.word;
 
-  const ch = currentBook.chapters[idx];
-  readerContent.innerHTML = ch.content;
+  popupWord.textContent = def.word;
+  popupPos.textContent = def.part_of_speech || "word";
+  popupCount.textContent = def.lookup_count > 1 ? `${def.lookup_count}x` : "";
 
-  if (chapterLabel) {
-    chapterLabel.textContent = `${idx + 1} / ${currentBook.chapters.length}`;
+  updateSaveBtnState(def.is_saved);
+
+  if (def.meanings && def.meanings.length > 0) {
+    popupBody.innerHTML = `
+      <ol>
+        ${def.meanings.slice(0, 5).map((m) => `<li>${escapeHtml(m)}</li>`).join("")}
+      </ol>
+    `;
+  } else {
+    popupBody.innerHTML = `<p class="def-hint">No definitions available for this entry.</p>`;
   }
-  if (prevBtn) prevBtn.disabled = idx <= 0;
-  if (nextBtn) nextBtn.disabled = idx >= currentBook.chapters.length - 1;
-
-  readerScrollContainer.scrollTo({ top: 0, behavior: "smooth" });
-  updateProgress();
-  highlightActiveDrawerItem();
 }
 
-function updateProgress() {
-  if (!currentBook) return;
-  const total = currentBook.chapters.length;
-  const pct = Math.round(((currentChapterIdx + 1) / total) * 100);
-  if (progressBar) progressBar.style.width = `${pct}%`;
-  if (progressText) progressText.textContent = `${pct}% (Ch. ${currentChapterIdx + 1}/${total})`;
+function showError(msg: string) {
+  popupWord.textContent = "Not Found";
+  popupPos.textContent = "";
+  popupCount.textContent = "";
+  updateSaveBtnState(false);
+  popupBody.innerHTML = `<p class="def-hint" style="color:#f87171;">${escapeHtml(msg)}</p>`;
 }
 
-prevBtn?.addEventListener("click", () => {
-  if (currentBook && currentChapterIdx > 0) renderChapter(currentChapterIdx - 1);
-});
-
-nextBtn?.addEventListener("click", () => {
-  if (currentBook && currentChapterIdx < currentBook.chapters.length - 1) {
-    renderChapter(currentChapterIdx + 1);
-  }
-});
-
-// ----------------------------------------------------
-// 2. Open EPUB via Native Dialog
-// ----------------------------------------------------
-openBtn?.addEventListener("click", async () => {
-  try {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "EPUB Documents", extensions: ["epub"] }],
-    });
-
-    if (selected) {
-      const pathStr = Array.isArray(selected) ? selected[0] : selected;
-      if (bookTitleFooter) bookTitleFooter.textContent = "Loading book...";
-
-      const book = await invoke<EpubBook>("load_epub", { path: pathStr });
-      currentBook = book;
-      if (bookTitleFooter) bookTitleFooter.textContent = book.title;
-
-      populateChapterDrawer();
-      renderChapter(0);
-    }
-  } catch (err) {
-    console.error("Open dialog error:", err);
-    alert(`Could not open or render EPUB: ${err}`);
-  }
-});
-
-// ----------------------------------------------------
-// 3. Chapter Drawer (Table of Contents)
-// ----------------------------------------------------
-function populateChapterDrawer() {
-  if (!currentBook) return;
-  drawerList.innerHTML = "";
-
-  currentBook.chapters.forEach((ch, idx) => {
-    const item = document.createElement("div");
-    item.className = "drawer-item";
-    item.textContent = ch.title;
-    item.addEventListener("click", () => {
-      renderChapter(idx);
-      chapterDrawer.classList.add("hidden");
-    });
-    drawerList.appendChild(item);
-  });
-}
-
-function highlightActiveDrawerItem() {
-  const items = drawerList.querySelectorAll(".drawer-item");
-  items.forEach((item, idx) => {
-    if (idx === currentChapterIdx) {
-      item.classList.add("active");
-    } else {
-      item.classList.remove("active");
-    }
-  });
-}
-
-tocBtn?.addEventListener("click", () => {
-  chapterDrawer.classList.toggle("hidden");
-  typoPopover.classList.add("hidden");
-  wordbankDrawer.classList.add("hidden");
-});
-
-drawerClose?.addEventListener("click", () => {
-  chapterDrawer.classList.add("hidden");
-});
-
-// ----------------------------------------------------
-// 4. Typography Customizer (Matching Screenshot)
-// ----------------------------------------------------
-const sliderFontSize = document.querySelector<HTMLInputElement>("#slider-font-size")!;
-const selectFontFamily = document.querySelector<HTMLSelectElement>("#select-font-family")!;
-const sliderLineHeight = document.querySelector<HTMLInputElement>("#slider-line-height")!;
-const sliderWordSpace = document.querySelector<HTMLInputElement>("#slider-word-space")!;
-const sliderParaSpace = document.querySelector<HTMLInputElement>("#slider-para-space")!;
-const alignButtons = document.querySelectorAll<HTMLButtonElement>(".align-btn");
-const resetTypoBtn = document.querySelector<HTMLButtonElement>("#reset-typo-btn")!;
-
-const DEFAULT_TYPO = {
-  fontSize: "19",
-  fontFamily: "Constantia, serif",
-  lineHeight: "1.8",
-  wordSpace: "0",
-  paraSpace: "20",
-  textAlign: "left",
-};
-
-function loadTypoSettings() {
-  const saved = localStorage.getItem("lookmeup_typography");
-  const settings = saved ? JSON.parse(saved) : DEFAULT_TYPO;
-  applyTypo(settings);
-}
-
-function applyTypo(s: typeof DEFAULT_TYPO) {
-  document.documentElement.style.setProperty("--reader-font-size", `${s.fontSize}px`);
-  document.documentElement.style.setProperty("--reader-font-family", s.fontFamily);
-  document.documentElement.style.setProperty("--reader-line-height", s.lineHeight);
-  document.documentElement.style.setProperty("--reader-word-spacing", `${s.wordSpace}px`);
-  document.documentElement.style.setProperty("--reader-para-spacing", `${s.paraSpace}px`);
-  document.documentElement.style.setProperty("--reader-text-align", s.textAlign);
-
-  sliderFontSize.value = s.fontSize;
-  selectFontFamily.value = s.fontFamily;
-  sliderLineHeight.value = s.lineHeight;
-  sliderWordSpace.value = s.wordSpace;
-  sliderParaSpace.value = s.paraSpace;
-
-  alignButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.align === s.textAlign);
-  });
-
-  localStorage.setItem("lookmeup_typography", JSON.stringify(s));
-}
-
-function saveCurrentTypo() {
-  const activeAlign = document.querySelector<HTMLButtonElement>(".align-btn.active")?.dataset.align || "left";
-  const s = {
-    fontSize: sliderFontSize.value,
-    fontFamily: selectFontFamily.value,
-    lineHeight: sliderLineHeight.value,
-    wordSpace: sliderWordSpace.value,
-    paraSpace: sliderParaSpace.value,
-    textAlign: activeAlign,
-  };
-  applyTypo(s);
-}
-
-sliderFontSize.addEventListener("input", saveCurrentTypo);
-selectFontFamily.addEventListener("change", saveCurrentTypo);
-sliderLineHeight.addEventListener("input", saveCurrentTypo);
-sliderWordSpace.addEventListener("input", saveCurrentTypo);
-sliderParaSpace.addEventListener("input", saveCurrentTypo);
-
-alignButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    alignButtons.forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    saveCurrentTypo();
-  });
-});
-
-resetTypoBtn.addEventListener("click", () => {
-  applyTypo(DEFAULT_TYPO);
-});
-
-typoBtn?.addEventListener("click", () => {
-  typoPopover.classList.toggle("hidden");
-  chapterDrawer.classList.add("hidden");
-  wordbankDrawer.classList.add("hidden");
-});
-
-// ----------------------------------------------------
-// 5. Touch & Mouse Word Lookup
-// ----------------------------------------------------
-function hidePopup() {
-  popupCard.classList.add("hidden");
-}
-
-popupClose.addEventListener("click", hidePopup);
-
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    hidePopup();
-    typoPopover.classList.add("hidden");
-    chapterDrawer.classList.add("hidden");
-    wordbankDrawer.classList.add("hidden");
-  }
-});
-
-document.addEventListener("pointerdown", (e) => {
-  const target = e.target as Node;
-  if (!popupCard.contains(target)) hidePopup();
-  if (!typoPopover.contains(target) && !typoBtn?.contains(target)) {
-    typoPopover.classList.add("hidden");
-  }
-});
-
-function updatePopupSaveBtn(saved: boolean) {
-  if (saved) {
+function updateSaveBtnState(isSaved: boolean) {
+  if (isSaved) {
     popupSaveBtn.classList.add("saved");
     popupSaveText.textContent = "Saved";
   } else {
@@ -297,108 +103,126 @@ function updatePopupSaveBtn(saved: boolean) {
   }
 }
 
-popupSaveBtn.addEventListener("click", async (e) => {
-  e.stopPropagation();
-  if (!activePopupWord) return;
-  try {
-    const newSaved = await invoke<boolean>("toggle_save_word", { word: activePopupWord });
-    updatePopupSaveBtn(newSaved);
+async function searchWord(query: string) {
+  const clean = query.trim();
+  if (!clean) return;
 
-    // Synchronize with loaded word bank items
-    const item = wordHistoryItems.find((i) => i.word.toLowerCase() === activePopupWord.toLowerCase());
-    if (item) {
-      item.is_saved = newSaved;
-    } else if (newSaved) {
-      // Reload history to include the newly saved item
-      await loadWordBank();
-      return;
-    }
-    updateCounts();
-    applyWordBankFilter();
+  popupWord.textContent = clean;
+  popupPos.textContent = "...";
+  popupCount.textContent = "";
+  popupBody.innerHTML = `<p class="def-hint">Searching offline dictionary...</p>`;
+
+  try {
+    const def = await invoke<Definition>("lookup_word", { word: clean });
+    showDefinition(def);
+  } catch (err) {
+    showError(String(err));
+  }
+}
+
+// ----------------------------------------------------
+// 2. View Switching (Compact vs Expanded)
+// ----------------------------------------------------
+async function switchView(expanded: boolean) {
+  isExpanded = expanded;
+  if (expanded) {
+    popupView.classList.add("hidden");
+    wordbankView.classList.remove("hidden");
+    await invoke("resize_window", { expanded: true });
+    await loadWordBank();
+  } else {
+    wordbankView.classList.add("hidden");
+    popupView.classList.remove("hidden");
+    await invoke("resize_window", { expanded: false });
+  }
+}
+
+btnOpenWordbank.addEventListener("click", () => switchView(true));
+btnBackToPopup.addEventListener("click", () => switchView(false));
+btnClosePopup.addEventListener("click", () => invoke("hide_window"));
+btnCloseWordbank.addEventListener("click", () => invoke("hide_window"));
+
+// ----------------------------------------------------
+// 3. Hotkey Listeners & Event Subscribers
+// ----------------------------------------------------
+listen<LookupPayload>("show-definition", (event) => {
+  switchView(false);
+  const payload = event.payload;
+  if ("Ok" in payload) {
+    showDefinition(payload.Ok);
+  } else {
+    showError(payload.Err);
+  }
+});
+
+listen("open-wordbank", () => {
+  switchView(true);
+});
+
+listen("open-search", () => {
+  switchView(false);
+  companionSearch.focus();
+  companionSearch.select();
+});
+
+// Auto-dismiss on blur when in compact mode
+window.addEventListener("blur", () => {
+  if (!isExpanded) {
+    invoke("hide_window");
+  }
+});
+
+// Escape key to dismiss
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    invoke("hide_window");
+  }
+});
+
+// Search input submit
+companionSearch.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    searchWord(companionSearch.value);
+  }
+});
+
+// Save word toggle button
+popupSaveBtn.addEventListener("click", async () => {
+  if (!activeWord) return;
+  try {
+    const isSaved = await invoke<boolean>("toggle_save_word", { word: activeWord });
+    updateSaveBtnState(isSaved);
+    // Sync item in word bank list if loaded
+    const item = wordHistoryItems.find((i) => i.word.toLowerCase() === activeWord.toLowerCase());
+    if (item) item.is_saved = isSaved;
   } catch (err) {
     console.error("Failed to toggle save word:", err);
   }
 });
 
-async function handleSelection() {
-  const selection = window.getSelection();
-  if (!selection || selection.isCollapsed) return;
-
-  const rawText = selection.toString().trim();
-  const cleanWord = rawText.replace(/^[^\w]+|[^\w]+$/g, "");
-  if (!cleanWord || cleanWord.length > 40) return;
-
-  const range = selection.getRangeAt(0);
-  const rect = range.getBoundingClientRect();
-
-  const popupWidth = 320;
-  const popupHeight = 180;
-
-  let left = rect.left + rect.width / 2 - popupWidth / 2;
-  left = Math.max(12, Math.min(left, window.innerWidth - popupWidth - 12));
-
-  let top = rect.top - popupHeight - 12;
-  if (top < 60) top = rect.bottom + 12;
-
-  popupCard.style.left = `${left}px`;
-  popupCard.style.top = `${top}px`;
-
-  activePopupWord = cleanWord;
-  updatePopupSaveBtn(false);
-
-  popupWord.textContent = cleanWord;
-  popupPos.textContent = "...";
-  popupCount.textContent = "";
-  popupBody.innerHTML = `<p style="color:#71717a;margin:4px 0;">Searching offline dictionary...</p>`;
-  popupCard.classList.remove("hidden");
-
-  try {
-    const def = await invoke<Definition>("lookup_word", { word: cleanWord });
-    activePopupWord = def.word;
-    updatePopupSaveBtn(def.is_saved);
-
-    popupWord.textContent = def.word;
-    popupPos.textContent = def.part_of_speech;
-    popupCount.textContent = `${def.lookup_count}x`;
-    popupBody.innerHTML = `
-      <ol>
-        ${def.meanings.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}
-      </ol>
-    `;
-  } catch (err) {
-    popupPos.textContent = "";
-    popupCount.textContent = "";
-    popupBody.innerHTML = `<p class="popup-error">${escapeHtml(String(err))}</p>`;
-  }
-}
-
-document.addEventListener("pointerup", () => {
-  setTimeout(handleSelection, 50);
-});
-
 // ----------------------------------------------------
-// 6. Word Bank & Lookup Frequency
+// 4. Word Bank & Vocabulary Management
 // ----------------------------------------------------
-let wordHistoryItems: WordHistoryItem[] = [];
-
 async function loadWordBank() {
   try {
     wordHistoryItems = await invoke<WordHistoryItem[]>("get_word_history");
-    updateCounts();
-    applyWordBankFilter();
+    updateWordBankStats();
+    renderWordBank();
   } catch (err) {
     console.error("Failed to load word history:", err);
-    wordbankList.innerHTML = `<div class="wordbank-empty">Failed to load word history.</div>`;
+    wordbankItemsList.innerHTML = `<div class="empty-state">Failed to load vocabulary history.</div>`;
   }
 }
 
-function updateCounts() {
-  countAll.textContent = String(wordHistoryItems.length);
-  countSaved.textContent = String(wordHistoryItems.filter((i) => i.is_saved).length);
+function updateWordBankStats() {
+  const total = wordHistoryItems.length;
+  const saved = wordHistoryItems.filter((i) => i.is_saved).length;
+  statAllCount.textContent = String(total);
+  statSavedCount.textContent = String(saved);
 }
 
-function applyWordBankFilter() {
-  const query = wordbankSearch.value.toLowerCase().trim();
+function renderWordBank() {
+  const query = wordbankFilterInput.value.toLowerCase().trim();
   let filtered = wordHistoryItems;
 
   if (wordbankFilter === "saved") {
@@ -413,143 +237,158 @@ function applyWordBankFilter() {
     );
   }
 
-  renderWordBank(filtered);
-}
-
-function renderWordBank(items: WordHistoryItem[]) {
-  if (!items || items.length === 0) {
-    const emptyMsg =
+  if (filtered.length === 0) {
+    const msg =
       wordbankFilter === "saved"
-        ? `No saved words yet.<br /><small style="color:#52525b;margin-top:6px;display:block;">Tap the "Save Word" button on any definition popup or star words below.</small>`
-        : `No words looked up yet.<br /><small style="color:#52525b;margin-top:6px;display:block;">Select words while reading to build your dictionary history.</small>`;
-
-    wordbankList.innerHTML = `<div class="wordbank-empty">${emptyMsg}</div>`;
+        ? `No saved words yet.<br><small style="color:#52525b;margin-top:4px;display:block;">Click "Save Word" on any definition card to pin vocabulary here.</small>`
+        : `No lookup history recorded yet.<br><small style="color:#52525b;margin-top:4px;display:block;">Press your hotkey over any word in any desktop app to start building your personal memory bank.</small>`;
+    wordbankItemsList.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
 
-  wordbankList.innerHTML = "";
-  items.forEach((item) => {
+  wordbankItemsList.innerHTML = "";
+  filtered.forEach((item) => {
     const card = document.createElement("div");
     card.className = "wordbank-card";
 
-    const firstMeaning = item.meanings && item.meanings.length > 0 ? item.meanings[0] : "";
-    const isSaved = item.is_saved;
+    const meaningExcerpt = item.meanings && item.meanings.length > 0 ? item.meanings[0] : "";
 
     card.innerHTML = `
       <div class="wordbank-info">
         <div class="wordbank-top">
           <span class="wordbank-word">${escapeHtml(item.word)}</span>
-          <span class="wordbank-pos">${escapeHtml(item.part_of_speech)}</span>
+          <span class="wordbank-pos">${escapeHtml(item.part_of_speech || "word")}</span>
           <span class="wordbank-badge">${item.lookup_count}x</span>
         </div>
-        <div class="wordbank-meaning">${escapeHtml(firstMeaning)}</div>
+        <div class="wordbank-meaning">${escapeHtml(meaningExcerpt)}</div>
       </div>
-      <div class="wordbank-card-actions">
-        <button class="wordbank-star-btn ${isSaved ? "saved" : ""}" title="${isSaved ? "Remove from saved words" : "Save word"}">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="${isSaved ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <div class="wordbank-actions">
+        <button class="star-btn ${item.is_saved ? "saved" : ""}" title="${item.is_saved ? "Unsave" : "Save"}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="${item.is_saved ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
           </svg>
         </button>
-        <button class="wordbank-del-btn" title="Delete from history">&times;</button>
+        <button class="del-btn" title="Delete from history">&times;</button>
       </div>
     `;
 
-    // Clicking card opens the dictionary popup in center view
+    // Click card to open in compact definition view
     card.querySelector(".wordbank-info")?.addEventListener("click", () => {
-      activePopupWord = item.word;
-      updatePopupSaveBtn(item.is_saved);
-
-      popupWord.textContent = item.word;
-      popupPos.textContent = item.part_of_speech;
-      popupCount.textContent = `${item.lookup_count}x`;
-      popupBody.innerHTML = `
-        <ol>
-          ${item.meanings.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}
-        </ol>
-      `;
-      popupCard.style.left = "340px";
-      popupCard.style.top = "100px";
-      popupCard.classList.remove("hidden");
+      showDefinition({
+        word: item.word,
+        part_of_speech: item.part_of_speech,
+        meanings: item.meanings,
+        lookup_count: item.lookup_count,
+        is_saved: item.is_saved,
+      });
+      switchView(false);
     });
 
-    // Star/Bookmark toggle handler
-    card.querySelector(".wordbank-star-btn")?.addEventListener("click", async (e) => {
+    // Star/Save toggle
+    card.querySelector(".star-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       try {
         const newSaved = await invoke<boolean>("toggle_save_word", { word: item.word });
         item.is_saved = newSaved;
-        if (activePopupWord.toLowerCase() === item.word.toLowerCase()) {
-          updatePopupSaveBtn(newSaved);
-        }
-        updateCounts();
-        applyWordBankFilter();
+        updateWordBankStats();
+        renderWordBank();
       } catch (err) {
-        console.error("Failed to toggle save word:", err);
+        console.error("Failed to toggle word save:", err);
       }
     });
 
-    // Delete handler
-    card.querySelector(".wordbank-del-btn")?.addEventListener("click", async (e) => {
+    // Delete word
+    card.querySelector(".del-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       try {
         await invoke("delete_history_word", { word: item.word });
         wordHistoryItems = wordHistoryItems.filter((i) => i.word.toLowerCase() !== item.word.toLowerCase());
-        updateCounts();
-        applyWordBankFilter();
+        updateWordBankStats();
+        renderWordBank();
       } catch (err) {
         console.error("Failed to delete word:", err);
       }
     });
 
-    wordbankList.appendChild(card);
+    wordbankItemsList.appendChild(card);
   });
 }
 
-// Search bar filtering
-wordbankSearch.addEventListener("input", applyWordBankFilter);
+wordbankFilterInput.addEventListener("input", renderWordBank);
 
-// Press Enter in search bar to lookup and save any custom word
-wordbankSearch.addEventListener("keydown", async (e) => {
-  if (e.key === "Enter") {
-    const val = wordbankSearch.value.trim();
-    if (val) {
-      try {
-        await invoke("toggle_save_word", { word: val });
-        wordbankSearch.value = "";
-        await loadWordBank();
-      } catch (err) {
-        alert(String(err));
-      }
-    }
-  }
-});
-
-// Tab Switchers
-wordbankTabAll.addEventListener("click", () => {
+// Tabs Navigation
+tabAll.addEventListener("click", () => {
   wordbankFilter = "all";
-  wordbankTabAll.classList.add("active");
-  wordbankTabSaved.classList.remove("active");
-  applyWordBankFilter();
+  tabAll.classList.add("active");
+  tabSaved.classList.remove("active");
+  tabSettings.classList.remove("active");
+  paneVocabulary.classList.remove("hidden");
+  paneSettings.classList.add("hidden");
+  renderWordBank();
 });
 
-wordbankTabSaved.addEventListener("click", () => {
+tabSaved.addEventListener("click", () => {
   wordbankFilter = "saved";
-  wordbankTabSaved.classList.add("active");
-  wordbankTabAll.classList.remove("active");
-  applyWordBankFilter();
+  tabSaved.classList.add("active");
+  tabAll.classList.remove("active");
+  tabSettings.classList.remove("active");
+  paneVocabulary.classList.remove("hidden");
+  paneSettings.classList.add("hidden");
+  renderWordBank();
 });
 
-wordbankBtn?.addEventListener("click", () => {
-  wordbankDrawer.classList.toggle("hidden");
-  chapterDrawer.classList.add("hidden");
-  typoPopover.classList.add("hidden");
-  if (!wordbankDrawer.classList.contains("hidden")) {
-    loadWordBank();
+tabSettings.addEventListener("click", () => {
+  tabSettings.classList.add("active");
+  tabAll.classList.remove("active");
+  tabSaved.classList.remove("active");
+  paneVocabulary.classList.add("hidden");
+  paneSettings.classList.remove("hidden");
+  loadHotkeySettings();
+});
+
+// ----------------------------------------------------
+// 5. Settings: Hotkey Configuration
+// ----------------------------------------------------
+async function loadHotkeySettings() {
+  try {
+    const key = await invoke<string>("get_current_hotkey");
+    activeHotkeyDisplay.textContent = key.toUpperCase();
+    hintHotkey.textContent = key.toUpperCase();
+    footerHotkeyPill.textContent = key.toUpperCase();
+    customHotkeyInput.value = key;
+  } catch (err) {
+    console.error("Failed to fetch current hotkey:", err);
   }
+}
+
+async function applyNewHotkey(shortcut: string) {
+  hotkeyStatusMsg.textContent = "Updating shortcut...";
+  hotkeyStatusMsg.className = "status-msg";
+
+  try {
+    const saved = await invoke<string>("set_current_hotkey", { newHotkey: shortcut });
+    activeHotkeyDisplay.textContent = saved.toUpperCase();
+    hintHotkey.textContent = saved.toUpperCase();
+    footerHotkeyPill.textContent = saved.toUpperCase();
+    customHotkeyInput.value = saved;
+    hotkeyStatusMsg.textContent = `Shortcut updated to ${saved.toUpperCase()}!`;
+    hotkeyStatusMsg.className = "status-msg success";
+  } catch (err) {
+    hotkeyStatusMsg.textContent = `Failed: ${err}`;
+    hotkeyStatusMsg.className = "status-msg error";
+  }
+}
+
+presetButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const key = btn.dataset.key;
+    if (key) applyNewHotkey(key);
+  });
 });
 
-wordbankClose?.addEventListener("click", () => {
-  wordbankDrawer.classList.add("hidden");
+btnApplyHotkey.addEventListener("click", () => {
+  const val = customHotkeyInput.value.trim();
+  if (val) applyNewHotkey(val);
 });
 
 function escapeHtml(str: string): string {
@@ -558,5 +397,5 @@ function escapeHtml(str: string): string {
   return div.innerHTML;
 }
 
-// Initial load
-loadTypoSettings();
+// Initial Boot
+loadHotkeySettings();

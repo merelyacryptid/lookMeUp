@@ -14,14 +14,15 @@
     "windows": [
       {
         "label": "main",
-        "title": "LookMeUp Reader",
-        "width": 1024,
-        "height": 720,
-        "decorations": true,
-        "alwaysOnTop": false,
-        "skipTaskbar": false,
-        "transparent": false,
-        "visible": true
+        "title": "LookMeUp",
+        "width": 380,
+        "height": 340,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "transparent": true,
+        "visible": false,
+        "shadow": false
       }
     ],
     "security": {

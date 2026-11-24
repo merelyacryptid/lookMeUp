@@ -1,19 +1,22 @@
 # LookMeUp
 
-> A distraction-free, touch-friendly desktop reader with instantaneous, 100% offline dictionary lookups.
+> A distraction-free, desktop-wide background companion providing instantaneous, 100% offline dictionary lookups across any application.
 
 ---
 
 ## About The Project
 
-As someone who reads a lot on laptops and 2-in-1 touchscreen devices, I hated having my reading flow broken every time I ran into an unfamiliar word without an active internet connection (which happens constantly around my college campus). Most online dictionary tools fail without Wi-Fi, leak reading activity to remote APIs, or clutter the screen with competing popups.
+LookMeUp runs silently in the background as an operating-system-wide companion. Whenever you encounter an unfamiliar word while reading an article, ebook, paper, or code in any app (Chrome, Sumatra PDF, Kindle, Calibre, Word, VS Code), simply highlight the word and press your global hotkey (default: `Ctrl+Alt+D`).
 
-LookMeUp is built as a distraction-free, touch-friendly reading environment:
-* **Touch-Screen Friendly:** No keyboard needed. Tap, double-tap, or highlight any word on your touchscreen or with your mouse to instantly see its meaning.
-* **Single Unified Popup:** Because LookMeUp hosts the reading canvas, you get exactly one clean, beautiful dictionary bubble positioned directly over the tapped word.
-* **Instant Offline SQLite (<1 ms):** Directly queries a local, pre-indexed SQLite B-tree database with 224,954 headwords and 218,157 morphological lemma fallbacks (e.g. tapping "epiphanies" routes to "epiphany", "running" to "run").
-* **Word Bank & Frequency Tracker:** Automatically tracks your vocabulary discoveries in local storage (`user_data.db`). See how many times you have encountered a word (`2x`, `3x`), save words with one tap, and search through your personal Word Bank drawer anytime.
-* **Typography Controls & Image-Inlined EPUB Engine:** Native pure-Rust EPUB extractor that inlines book illustrations as Base64 Data URIs, complete with customizable font styles, text sizing, line/word/paragraph spacing, and text alignment.
+LookMeUp automatically captures the word, queries its offline B-tree SQLite dictionary, and displays a floating definition card right at your cursor in under a millisecond with zero network requests and zero distractions.
+
+### Key Highlights
+* **Universal Desktop Companion:** Works across every application on your machine without requiring plugins or browser extensions.
+* **Automatic Word Capture:** Select any text and press your hotkey. LookMeUp automatically copies the highlighted text and resolves the definition without needing manual `Ctrl+C`.
+* **Configurable Global Hotkey:** Choose your preferred shortcut chord (e.g. `Ctrl+Alt+D`, `Ctrl+Shift+D`, `Alt+D`, or any custom key combination) directly in Settings.
+* **Instant Offline SQLite (<1 ms):** Directly queries a local, pre-indexed SQLite B-tree database with 224,954 headwords and 218,157 morphological lemma fallbacks (e.g. "epiphanies" routes to "epiphany", "running" to "run").
+* **Word Bank & Frequency Tracker:** Automatically records your lookups on-device in `user_data.db`. See your device-first lookup frequency (`2x`, `3x`), save words with one click, and browse or search your personal Word Bank anytime.
+* **System Tray Resident:** Minimizes cleanly to the Windows notification area / system tray so it is always ready without cluttering your taskbar.
 * **Complete Privacy:** 100% offline. Zero network calls, zero telemetry, zero accounts.
 
 ---
@@ -22,25 +25,31 @@ LookMeUp is built as a distraction-free, touch-friendly reading environment:
 
 ```
 +-------------------------------------------------------------+
-|              LookMeUp In-Reader Canvas (Webview)            |
+|        Any Desktop App (Kindle, Sumatra, Chrome, Word)      |
 |                                                             |
-|   - Native pure-Rust EPUB extractor & Base64 image inliner  |
-|   - Direct-DOM touch text selection (window.getSelection)   |
-|   - Single inline dictionary card (range.getBoundingClientRect)
-|   - Word Bank drawer with frequency counts & saved words    |
-|   - Typography customizer popover (fonts, sizing, spacing)  |
+|   1. User selects word and presses Global Hotkey            |
++------------------------------+------------------------------+
+                               | Win32 Auto-Capture / Hotkey
++------------------------------v------------------------------+
+|                     Tauri v2 Rust Core                      |
+|                                                             |
+|   - Global shortcut hook (tauri-plugin-global-shortcut)     |
+|   - Win32 simulated input capture (user32 keybd_event)      |
+|   - Instant exact match & lemma fallback query (rusqlite)   |
+|   - Cursor coordinate detection & floating window placement |
+|   - System Tray management (tauri::tray::TrayIconBuilder)   |
 +------------------------------+------------------------------+
                                |
                Tauri IPC (invoke / JSON)
                                |
 +------------------------------v------------------------------+
-|                     Tauri v2 Rust Core                      |
+|             Floating Definition Card (Webview)              |
 |                                                             |
-|   - Instant exact-match B-tree query (<1 ms)                |
-|   - Morphological lemma fallback (e.g. "epiphanies" -> "epiphany")
-|   - Device-first user telemetry via SQLite UPSERT           |
-|   - Pure-Rust ZIP extraction and Base64 Data URI inlining   |
-+------------------------------+------------------------------+
+|   - Frameless, translucent dark-mode card near cursor       |
+|   - Sub-millisecond render with vanilla TypeScript & CSS    |
+|   - Auto-hides on Esc or blur                               |
+|   - Expandable into full Word Bank & Settings manager       |
++-------------------------------------------------------------+
                                |
             Embedded SQLite Databases (Local Disk)
                                |
@@ -52,6 +61,7 @@ LookMeUp is built as a distraction-free, touch-friendly reading environment:
 | - 224,954 headwords (entries)| | - Word Bank history        |
 | - 218,157 morphology mappings| | - Device lookup frequency  |
 | - B-tree indexed (NOCASE)    | | - Explicit saved words     |
+|                              | | - Custom hotkey settings   |
 +------------------------------+ +----------------------------+
 ```
 
@@ -60,10 +70,10 @@ LookMeUp is built as a distraction-free, touch-friendly reading environment:
 ## Tech Stack
 
 * **Core Runtime:** Tauri v2 (Rust 2024 edition)
-* **Backend:** Rust, `rusqlite` (bundled SQLite3), `serde` / `serde_json`, `zip` (pure-Rust extractor), `base64`
-* **Plugins:** `tauri-plugin-dialog`, `tauri-plugin-global-shortcut`, `tauri-plugin-clipboard-manager`
-* **Frontend:** Vanilla TypeScript, Vite, CSS3 (reader canvas, glassmorphic drawers, typography popover)
-* **Data Pipeline:** Python script compiling 224,954 Webster's Unabridged and Open English WordNet entries into an indexed, sub-millisecond SQLite database (`dictionary.db`) with 218,157 morphological lemma transformations.
+* **Backend:** Rust, `rusqlite` (bundled SQLite3), `serde` / `serde_json`, Win32 API (`user32.dll`)
+* **Plugins:** `tauri-plugin-global-shortcut`, `tauri-plugin-clipboard-manager`, `tauri-plugin-dialog`
+* **Frontend:** Vanilla TypeScript, Vite, CSS3 (frameless floating card, glassmorphic Word Bank)
+* **Data Pipeline:** Python script compiling 224,954 Webster's Unabridged (1913) and Open English WordNet entries into an indexed, sub-millisecond SQLite database (`dictionary.db`) with 218,157 morphological lemma transformations.
 
 ---
 
@@ -91,11 +101,10 @@ python scripts/build_full_db.py
 - [x] **Phase 3: Global Shortcut & Text Capture** - System-wide hotkey listener (`Ctrl+Alt+D`) and active word capture.
 - [x] **Phase 4: Floating Cursor Popup** - Frameless, auto-positioning window at mouse cursor with blur/Esc auto-dismiss.
 - [x] **Phase 5: Full 225,000+ Word Dictionary Pipeline** - High-throughput batch ingestion pipeline compiling Webster's 1913 and Open English WordNet into an indexed B-tree database with 218,000+ morphological mappings (<1 ms latency).
-- [x] **Phase 6.1: In-Reader EPUB Canvas & Typography** - Pure-Rust EPUB extraction, Base64 image inlining, Table of Contents, and typography controls.
-- [x] **Phase 6.2: Word Bank & Device-First Lookup Frequency** - Local SQLite vocabulary tracking (`user_data.db`), UPSERT counting, badges, and searchable Word Bank drawer.
-- [x] **Phase 6.3: Explicit Save Word & Vocabulary Management** - Prominent "Save Word" toggle on definition popups, `is_saved` SQLite migration, and dedicated "All" vs "Saved" Word Bank filter tabs.
-- [ ] **Phase 7: EPUB Library & Favorites Grid** - Local cover-art library grid, "Read" status, and favorites collection.
-- [ ] **Phase 8: Highlights & Annotations** - In-reader text highlighting and saved notes drawer.
+- [x] **Phase 6.1: Win32 Auto-Capture on Hotkey** - Synthesizes non-intrusive copy commands on shortcut press to automatically acquire selected text from any foreground desktop app.
+- [x] **Phase 6.2: Configurable Global Hotkey** - SQLite settings persistence and dynamic runtime shortcut re-registration via Settings UI and System Tray.
+- [x] **Phase 6.3: System Tray Resident & Auto-Dismiss** - Runs silently in the Windows system tray with left-click toggle, right-click context menu, and blur/Esc auto-dismissal.
+- [x] **Phase 6.4: Word Bank, Frequency Badges, & Saved Words** - Local vocabulary management in `user_data.db`, UPSERT tracking, "All Lookups" vs. "Saved Words" filter tabs, and frequency badges (`2x`, `3x`).
 
 ---
 
