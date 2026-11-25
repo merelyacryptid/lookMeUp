@@ -9,27 +9,60 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[cfg(target_os = "windows")]
-fn simulate_ctrl_c() {
+fn simulate_ctrl_c() -> bool {
     unsafe extern "system" {
         fn keybd_event(bVk: u8, bScan: u8, dwFlags: u32, dwExtraInfo: usize);
+        fn GetClipboardSequenceNumber() -> u32;
     }
+    const VK_SHIFT: u8 = 0x10;
     const VK_CONTROL: u8 = 0x11;
+    const VK_MENU: u8 = 0x12; // Alt
+    const VK_LWIN: u8 = 0x5B;
+    const VK_RWIN: u8 = 0x5C;
+    const VK_LSHIFT: u8 = 0xA0;
+    const VK_RSHIFT: u8 = 0xA1;
+    const VK_LCONTROL: u8 = 0xA2;
+    const VK_RCONTROL: u8 = 0xA3;
+    const VK_LMENU: u8 = 0xA4;
+    const VK_RMENU: u8 = 0xA5;
     const VK_C: u8 = 0x43;
     const KEYEVENTF_KEYUP: u32 = 0x0002;
 
-    // Small delay to allow user to release trigger keys
-    std::thread::sleep(std::time::Duration::from_millis(40));
+    let seq_before = unsafe { GetClipboardSequenceNumber() };
 
-    // Send Ctrl + C
     unsafe {
+        // Explicitly release any modifier keys held by the user's hotkey chord
+        // so the foreground app sees a clean Ctrl+C instead of Ctrl+Alt+C or Ctrl+Shift+C.
+        for vk in [
+            VK_MENU, VK_LMENU, VK_RMENU,
+            VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
+            VK_LWIN, VK_RWIN,
+            VK_CONTROL, VK_LCONTROL, VK_RCONTROL,
+        ] {
+            keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+        }
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(25));
+
+    unsafe {
+        // Send clean Ctrl + C
         keybd_event(VK_CONTROL, 0, 0, 0);
         keybd_event(VK_C, 0, 0, 0);
         keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0);
         keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
     }
 
-    // Wait for target application to populate clipboard
-    std::thread::sleep(std::time::Duration::from_millis(70));
+    // Poll until the foreground app updates the clipboard (up to 180ms)
+    for _ in 0..12 {
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        let seq_now = unsafe { GetClipboardSequenceNumber() };
+        if seq_now != seq_before {
+            return true;
+        }
+    }
+
+    false
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -387,7 +420,7 @@ fn hide_window(window: tauri::WebviewWindow) {
 
 fn handle_hotkey_trigger(app: &tauri::AppHandle) {
     #[cfg(target_os = "windows")]
-    simulate_ctrl_c();
+    let _copied = simulate_ctrl_c();
 
     if let Some(window) = app.get_webview_window("main") {
         // Position window near cursor
