@@ -89,7 +89,12 @@
         <div id="pane-vocabulary" class="pane-content">
           <div class="search-filter-row">
             <input type="text" id="wordbank-filter-input" class="wordbank-filter-input" placeholder="Search words or definitions..." />
+            <div class="export-actions">
+              <button id="btn-export-anki" class="export-btn" title="Export as Anki flashcard deck (.txt)">Export Anki</button>
+              <button id="btn-export-csv" class="export-btn" title="Export as spreadsheet (.csv)">Export CSV</button>
+            </div>
           </div>
+          <div id="export-status-msg" class="export-status-msg hidden"></div>
           <div id="wordbank-items-list" class="wordbank-items-list"></div>
         </div>
 

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { save } from "@tauri-apps/plugin-dialog";
 
 interface Definition {
   word: string;
@@ -57,6 +58,9 @@ const statAllCount = document.querySelector<HTMLElement>("#stat-all-count")!;
 const statSavedCount = document.querySelector<HTMLElement>("#stat-saved-count")!;
 const wordbankFilterInput = document.querySelector<HTMLInputElement>("#wordbank-filter-input")!;
 const wordbankItemsList = document.querySelector<HTMLElement>("#wordbank-items-list")!;
+const btnExportAnki = document.querySelector<HTMLButtonElement>("#btn-export-anki")!;
+const btnExportCsv = document.querySelector<HTMLButtonElement>("#btn-export-csv")!;
+const exportStatusMsg = document.querySelector<HTMLElement>("#export-status-msg")!;
 
 // Settings Elements
 const activeHotkeyDisplay = document.querySelector<HTMLElement>("#active-hotkey-display")!;
@@ -358,6 +362,41 @@ function renderWordBank() {
 }
 
 wordbankFilterInput.addEventListener("input", renderWordBank);
+
+async function handleExport(format: "anki" | "csv") {
+  const savedOnly = wordbankFilter === "saved";
+  const ext = format === "anki" ? "txt" : "csv";
+  const prefix = savedOnly ? "lookmeup-saved" : "lookmeup-all";
+
+  try {
+    const filePath = await save({
+      defaultPath: `${prefix}-${format}.${ext}`,
+      filters: [
+        {
+          name: format === "anki" ? "Anki Flashcard Deck" : "CSV Spreadsheet",
+          extensions: [ext],
+        },
+      ],
+    });
+    if (!filePath) return;
+
+    const count = await invoke<number>("export_word_bank", {
+      path: filePath,
+      format,
+      savedOnly,
+    });
+    exportStatusMsg.textContent = `Exported ${count} ${count === 1 ? "word" : "words"} (${format.toUpperCase()})!`;
+    exportStatusMsg.className = "export-status-msg";
+    setTimeout(() => exportStatusMsg.classList.add("hidden"), 4000);
+  } catch (err) {
+    exportStatusMsg.textContent = String(err);
+    exportStatusMsg.className = "export-status-msg error";
+    setTimeout(() => exportStatusMsg.classList.add("hidden"), 4000);
+  }
+}
+
+btnExportAnki.addEventListener("click", () => handleExport("anki"));
+btnExportCsv.addEventListener("click", () => handleExport("csv"));
 
 // Tabs Navigation
 tabAll.addEventListener("click", () => {

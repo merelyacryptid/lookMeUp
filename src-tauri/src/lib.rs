@@ -283,6 +283,92 @@ fn delete_history_word(word: String) -> Result<(), String> {
     Ok(())
 }
 
+fn escape_csv_field(field: &str) -> String {
+    if field.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
+}
+
+fn escape_anki_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace(['\t', '\r', '\n'], " ")
+}
+
+#[tauri::command]
+fn export_word_bank(path: String, format: String, saved_only: bool) -> Result<usize, String> {
+    let mut items = get_word_history()?;
+    if saved_only {
+        items.retain(|i| i.is_saved);
+    }
+
+    if items.is_empty() {
+        return Err("No words to export in this view.".to_string());
+    }
+
+    let mut out = String::new();
+    match format.as_str() {
+        "anki" => {
+            out.push_str("#separator:tab\n#html:true\n#tags column:3\n");
+            for item in &items {
+                let word_esc = escape_anki_html(&item.word);
+                let ipa_part = if item.ipa.is_empty() {
+                    String::new()
+                } else {
+                    format!(" <span style=\"color:#888\">{}</span>", escape_anki_html(&item.ipa))
+                };
+                let front = format!("<b>{}</b>{}", word_esc, ipa_part);
+
+                let pos_esc = escape_anki_html(&item.part_of_speech);
+                let meanings_li: String = item
+                    .meanings
+                    .iter()
+                    .take(5)
+                    .map(|m| format!("<li>{}</li>", escape_anki_html(m)))
+                    .collect();
+                let back = format!(
+                    "<i>{}</i><ol>{}</ol><small>Looked up {}x</small>",
+                    pos_esc, meanings_li, item.lookup_count
+                );
+
+                let tag_pos = item
+                    .part_of_speech
+                    .split([',', ' '])
+                    .next()
+                    .unwrap_or("word")
+                    .to_lowercase();
+                let tags = format!("lookmeup {}", tag_pos);
+
+                out.push_str(&format!("{}\t{}\t{}\n", front, back, tags));
+            }
+        }
+        "csv" => {
+            out.push_str("Word,IPA,Part of Speech,Meanings,Lookup Count,Saved\n");
+            for item in &items {
+                let joined_meanings = item.meanings.join(" | ");
+                out.push_str(&format!(
+                    "{},{},{},{},{},{}\n",
+                    escape_csv_field(&item.word),
+                    escape_csv_field(&item.ipa),
+                    escape_csv_field(&item.part_of_speech),
+                    escape_csv_field(&joined_meanings),
+                    item.lookup_count,
+                    item.is_saved
+                ));
+            }
+        }
+        _ => return Err(format!("Unsupported export format: {}", format)),
+    }
+
+    std::fs::write(&path, out.as_bytes())
+        .map_err(|e| format!("Failed to write export file: {}", e))?;
+
+    Ok(items.len())
+}
+
 #[tauri::command]
 fn lookup_word(word: String) -> Result<Definition, String> {
     let start = Instant::now();
@@ -624,7 +710,8 @@ pub fn run() {
             get_current_hotkey,
             set_current_hotkey,
             resize_window,
-            speak_word
+            speak_word,
+            export_word_bank
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
