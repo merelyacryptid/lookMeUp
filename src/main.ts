@@ -68,6 +68,30 @@ const presetButtons = document.querySelectorAll<HTMLButtonElement>(".preset-btn"
 const customHotkeyInput = document.querySelector<HTMLInputElement>("#custom-hotkey-input")!;
 const btnApplyHotkey = document.querySelector<HTMLButtonElement>("#btn-apply-hotkey")!;
 const hotkeyStatusMsg = document.querySelector<HTMLElement>("#hotkey-status-msg")!;
+const btnReplayOnboarding = document.querySelector<HTMLButtonElement>("#btn-replay-onboarding")!;
+
+// Onboarding Elements
+const onboardingView = document.querySelector<HTMLElement>("#onboarding-view")!;
+const stepDots = document.querySelectorAll<HTMLElement>(".step-dot");
+const onboardSteps = [
+  document.querySelector<HTMLElement>("#onboard-step-1")!,
+  document.querySelector<HTMLElement>("#onboard-step-2")!,
+  document.querySelector<HTMLElement>("#onboard-step-3")!,
+];
+const typewriterText = document.querySelector<HTMLElement>("#typewriter-text")!;
+const onboardLead = document.querySelector<HTMLElement>("#onboard-lead")!;
+const onboardSub = document.querySelector<HTMLElement>("#onboard-sub")!;
+const btnSkipOnboarding = document.querySelector<HTMLButtonElement>("#btn-skip-onboarding")!;
+const btnOnboardNext1 = document.querySelector<HTMLButtonElement>("#btn-onboard-next-1")!;
+const btnOnboardBack2 = document.querySelector<HTMLButtonElement>("#btn-onboard-back-2")!;
+const btnOnboardNext2 = document.querySelector<HTMLButtonElement>("#btn-onboard-next-2")!;
+const btnOnboardBack3 = document.querySelector<HTMLButtonElement>("#btn-onboard-back-3")!;
+const btnOnboardFinish = document.querySelector<HTMLButtonElement>("#btn-onboard-finish")!;
+const demoChips = document.querySelectorAll<HTMLButtonElement>(".demo-chip");
+const onboardDemoResult = document.querySelector<HTMLElement>("#onboard-demo-result")!;
+const onboardHotkeyInput = document.querySelector<HTMLInputElement>("#onboard-hotkey-input")!;
+const onboardPresetChips = document.querySelectorAll<HTMLButtonElement>(".onboard-preset-chip");
+const onboardHotkeyStatus = document.querySelector<HTMLElement>("#onboard-hotkey-status")!;
 
 // ----------------------------------------------------
 // 1. Definition Display
@@ -170,6 +194,7 @@ async function searchWord(query: string) {
 // ----------------------------------------------------
 async function switchView(expanded: boolean) {
   isExpanded = expanded;
+  onboardingView.classList.add("hidden");
   if (expanded) {
     popupView.classList.add("hidden");
     wordbankView.classList.remove("hidden");
@@ -479,13 +504,149 @@ function escapeHtml(str: string): string {
   return div.innerHTML;
 }
 
+// ----------------------------------------------------
+// 6. Interactive Glassmorphic Onboarding
+// ----------------------------------------------------
+let typewriterTimer: number | null = null;
+
+function setOnboardingStep(stepIdx: number) {
+  onboardSteps.forEach((el, i) => {
+    el.classList.toggle("hidden", i !== stepIdx);
+  });
+  stepDots.forEach((dot, i) => {
+    dot.classList.toggle("active", i === stepIdx);
+  });
+}
+
+function playTypewriterGreeting() {
+  if (typewriterTimer) window.clearTimeout(typewriterTimer);
+  const greeting = "Hi there.";
+  typewriterText.textContent = "";
+  onboardLead.classList.remove("visible");
+  onboardSub.classList.remove("visible");
+
+  let idx = 0;
+  const tick = () => {
+    if (idx < greeting.length) {
+      typewriterText.textContent += greeting[idx];
+      idx++;
+      typewriterTimer = window.setTimeout(tick, 65);
+    } else {
+      onboardLead.classList.add("visible");
+      onboardSub.classList.add("visible");
+    }
+  };
+  typewriterTimer = window.setTimeout(tick, 180);
+}
+
+async function openOnboarding() {
+  isExpanded = true; // Keep window open on blur during onboarding
+  popupView.classList.add("hidden");
+  wordbankView.classList.add("hidden");
+  onboardingView.classList.remove("hidden");
+  await invoke("resize_window", { expanded: true });
+
+  onboardDemoResult.classList.add("hidden");
+  onboardHotkeyStatus.textContent = "";
+  const curKey = await invoke<string>("get_current_hotkey").catch(() => "ctrl+alt+d");
+  onboardHotkeyInput.value = curKey;
+
+  setOnboardingStep(0);
+  playTypewriterGreeting();
+}
+
+async function finishOnboarding() {
+  onboardingView.classList.add("hidden");
+  await switchView(false);
+}
+
+btnOnboardNext1.addEventListener("click", () => setOnboardingStep(1));
+btnOnboardBack2.addEventListener("click", () => setOnboardingStep(0));
+btnOnboardNext2.addEventListener("click", () => setOnboardingStep(2));
+btnOnboardBack3.addEventListener("click", () => setOnboardingStep(1));
+btnSkipOnboarding.addEventListener("click", () => finishOnboarding());
+btnReplayOnboarding.addEventListener("click", () => openOnboarding());
+
+// Interactive live dictionary test inside onboarding Step 2
+demoChips.forEach((chip) => {
+  chip.addEventListener("click", async () => {
+    const word = chip.dataset.word;
+    if (!word) return;
+    onboardDemoResult.classList.remove("hidden");
+    onboardDemoResult.innerHTML = `<span style="color:#94949e;">Looking up "${escapeHtml(word)}"...</span>`;
+    const t0 = performance.now();
+    try {
+      const def = await invoke<Definition>("lookup_word", { word });
+      const elapsed = (performance.now() - t0).toFixed(1);
+      const meaning = def.meanings[0] || "";
+      onboardDemoResult.innerHTML = `
+        <strong>${escapeHtml(def.word)}</strong>
+        <span style="color:#a1a1aa;margin:0 6px;">${escapeHtml(def.ipa)}</span>
+        <span style="color:#4ade80;font-size:11px;">(${elapsed} ms offline)</span>
+        <div style="margin-top:4px;color:#d4d4d8;">${escapeHtml(meaning)}</div>
+      `;
+    } catch (err) {
+      onboardDemoResult.innerHTML = `<span style="color:#f87171;">${escapeHtml(String(err))}</span>`;
+    }
+  });
+});
+
+// Live key-combo recorder for onboarding Step 3
+onboardHotkeyInput.addEventListener("keydown", (e) => {
+  // Allow Backspace/Tab/Enter normally when typing, capture modifier combos directly
+  if (!e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) return;
+  const key = e.key.toLowerCase();
+  if (["control", "alt", "shift", "meta"].includes(key)) {
+    e.preventDefault();
+    return;
+  }
+  e.preventDefault();
+  const parts: string[] = [];
+  if (e.ctrlKey) parts.push("ctrl");
+  if (e.altKey) parts.push("alt");
+  if (e.shiftKey) parts.push("shift");
+  if (e.metaKey) parts.push("super");
+  parts.push(key === " " ? "space" : key);
+  onboardHotkeyInput.value = parts.join("+");
+
+  onboardPresetChips.forEach((c) => {
+    c.classList.toggle("active", c.dataset.key === onboardHotkeyInput.value);
+  });
+});
+
+onboardPresetChips.forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const key = chip.dataset.key;
+    if (!key) return;
+    onboardHotkeyInput.value = key;
+    onboardPresetChips.forEach((c) => c.classList.remove("active"));
+    chip.classList.add("active");
+  });
+});
+
+btnOnboardFinish.addEventListener("click", async () => {
+  const chosen = onboardHotkeyInput.value.trim().toLowerCase() || "ctrl+alt+d";
+  onboardHotkeyStatus.textContent = "Registering shortcut...";
+  onboardHotkeyStatus.className = "status-msg";
+  try {
+    const saved = await invoke<string>("set_current_hotkey", { newHotkey: chosen });
+    activeHotkeyDisplay.textContent = saved.toUpperCase();
+    hintHotkey.textContent = saved.toUpperCase();
+    footerHotkeyPill.textContent = saved.toUpperCase();
+    customHotkeyInput.value = saved;
+    await finishOnboarding();
+  } catch (err) {
+    onboardHotkeyStatus.textContent = `Could not register shortcut: ${err}`;
+    onboardHotkeyStatus.className = "status-msg error";
+  }
+});
+
 // Initial Boot
 loadHotkeySettings();
 invoke<boolean>("check_first_run")
   .then((isFirstRun) => {
     if (isFirstRun) {
-      switchView(true);
-      tabSettings.click();
+      openOnboarding();
     }
   })
   .catch(() => {});

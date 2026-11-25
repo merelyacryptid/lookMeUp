@@ -136,6 +136,113 @@
               <li><strong>Local Storage:</strong> 100% on-device SQLite</li>
               <li><strong>Source:</strong> Webster's Revised Unabridged (1913) & Open English WordNet</li>
             </ul>
+            <div class="settings-footer-row">
+              <button id="btn-replay-onboarding" class="preset-btn">Replay Welcome Tour</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Interactive Glassmorphic Onboarding View -->
+      <section id="onboarding-view" class="onboarding-view hidden">
+        <div class="onboard-glow"></div>
+        <header class="onboard-top">
+          <div class="onboard-brand">
+            <span class="dot"></span>
+            <span>LookMeUp Setup</span>
+          </div>
+          <div class="onboard-dots">
+            <span class="step-dot active" data-step="1"></span>
+            <span class="step-dot" data-step="2"></span>
+            <span class="step-dot" data-step="3"></span>
+          </div>
+          <button id="btn-skip-onboarding" class="onboard-skip-btn" title="Skip setup">Skip</button>
+        </header>
+
+        <div class="onboard-stage">
+          <!-- Step 1: Typewriter Greeting -->
+          <div id="onboard-step-1" class="onboard-step active">
+            <h1 class="onboard-typewriter">
+              <span id="typewriter-text"></span><span class="typewriter-cursor">|</span>
+            </h1>
+            <p id="onboard-lead" class="onboard-lead">
+              Looking up words should be effortless, fast, and completely offline.
+            </p>
+            <p id="onboard-sub" class="onboard-sub">
+              LookMeUp is a minimal desktop companion that runs quietly in the background — 100% offline, across every app you use.
+            </p>
+            <div class="onboard-actions">
+              <button id="btn-onboard-next-1" class="onboard-primary-btn">Get Started &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Step 2: How It Works + Interactive Live Test -->
+          <div id="onboard-step-2" class="onboard-step hidden">
+            <h2 class="onboard-heading">Three steps. Under 50 ms.</h2>
+            <div class="onboard-flow-grid">
+              <div class="glass-tile">
+                <span class="tile-num">01</span>
+                <div class="tile-title">Select a word</div>
+                <div class="tile-desc">Highlight any word in PDFs, browsers, or editors.</div>
+              </div>
+              <div class="glass-tile">
+                <span class="tile-num">02</span>
+                <div class="tile-title">Press your hotkey</div>
+                <div class="tile-desc">Auto-captures the selection — no manual Ctrl+C.</div>
+              </div>
+              <div class="glass-tile">
+                <span class="tile-num">03</span>
+                <div class="tile-title">Instant lookup</div>
+                <div class="tile-desc">225k+ words &amp; IPA phonetics in &lt;50 ms offline.</div>
+              </div>
+            </div>
+
+            <div class="onboard-demo-box">
+              <div class="demo-prompt">
+                Try it live — click a word:
+                <button class="demo-chip" data-word="epiphany">epiphany</button>
+                <button class="demo-chip" data-word="serendipity">serendipity</button>
+                <button class="demo-chip" data-word="ubiquitous">ubiquitous</button>
+              </div>
+              <div id="onboard-demo-result" class="demo-result hidden"></div>
+            </div>
+
+            <div class="onboard-actions space-between">
+              <button id="btn-onboard-back-2" class="onboard-ghost-btn">&larr; Back</button>
+              <button id="btn-onboard-next-2" class="onboard-primary-btn">Choose Hotkey &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Interactive Hotkey Picker -->
+          <div id="onboard-step-3" class="onboard-step hidden">
+            <h2 class="onboard-heading">Choose your global hotkey</h2>
+            <p class="onboard-sub-compact">
+              Click the box below and press your desired key combination, or type it directly. Default is <strong>Ctrl+Alt+D</strong>.
+            </p>
+
+            <div class="hotkey-recorder-card">
+              <input
+                type="text"
+                id="onboard-hotkey-input"
+                class="hotkey-recorder-input"
+                value="ctrl+alt+d"
+                placeholder="Press keys (e.g. Ctrl+Alt+D)..."
+              />
+              <span class="recorder-hint">Press any modifier + key, or edit text</span>
+            </div>
+
+            <div class="onboard-presets">
+              <button class="onboard-preset-chip active" data-key="ctrl+alt+d">Ctrl+Alt+D (Default)</button>
+              <button class="onboard-preset-chip" data-key="ctrl+shift+d">Ctrl+Shift+D</button>
+              <button class="onboard-preset-chip" data-key="alt+d">Alt+D</button>
+            </div>
+
+            <div id="onboard-hotkey-status" class="status-msg"></div>
+
+            <div class="onboard-actions space-between">
+              <button id="btn-onboard-back-3" class="onboard-ghost-btn">&larr; Back</button>
+              <button id="btn-onboard-finish" class="onboard-primary-btn">Save &amp; Start LookMeUp</button>
+            </div>
           </div>
         </div>
       </section>
