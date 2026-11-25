@@ -481,3 +481,11 @@ function escapeHtml(str: string): string {
 
 // Initial Boot
 loadHotkeySettings();
+invoke<boolean>("check_first_run")
+  .then((isFirstRun) => {
+    if (isFirstRun) {
+      switchView(true);
+      tabSettings.click();
+    }
+  })
+  .catch(() => {});

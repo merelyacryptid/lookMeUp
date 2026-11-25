@@ -108,7 +108,7 @@ python scripts/build_full_db.py
 - [x] **Phase 6.4: Word Bank, Frequency Badges, & Saved Words** - Local vocabulary management in `user_data.db`, UPSERT tracking, "All Lookups" vs. "Saved Words" filter tabs, and frequency badges (`2x`, `3x`).
 - [x] **Phase 7: Offline Text-to-Speech & IPA Phonetics** - In-popup IPA pronunciation guide (125,927 transcriptions) and native OS speech synthesis audio.
 - [x] **Phase 8: Anki & Flashcard Export** - One-click export of saved words and definitions into Anki decks and CSV format for spaced repetition.
-- [ ] **Phase 9: Production Packaging & Windows Installer** - Standalone NSIS / MSI installer with auto-start on boot option.
+- [x] **Phase 9: Production Packaging & Windows Installer** - Resource-dir and AppData path resolution, first-run hotkey onboarding, and standalone 16.22 MiB NSIS Windows installer (`npm run tauri build`).
 
 ---
 

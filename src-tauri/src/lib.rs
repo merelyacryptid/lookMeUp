@@ -93,8 +93,26 @@ pub struct WordHistoryItem {
     pub last_looked_up: i64,
 }
 
+static DICTIONARY_DB_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+static USER_DB_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+static IS_FIRST_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn get_dictionary_db_path() -> std::path::PathBuf {
+    DICTIONARY_DB_PATH
+        .get()
+        .cloned()
+        .unwrap_or_else(|| std::path::PathBuf::from("../dictionary.db"))
+}
+
+fn get_user_db_path() -> std::path::PathBuf {
+    USER_DB_PATH
+        .get()
+        .cloned()
+        .unwrap_or_else(|| std::path::PathBuf::from("../user_data.db"))
+}
+
 fn get_user_db() -> Result<Connection, String> {
-    let conn = Connection::open("../user_data.db")
+    let conn = Connection::open(get_user_db_path())
         .map_err(|e| format!("Failed to open user DB: {}", e))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS word_history (
@@ -370,8 +388,8 @@ fn export_word_bank(path: String, format: String, saved_only: bool) -> Result<us
 }
 
 fn query_dictionary_entry(clean_word: &str) -> Result<Option<Definition>, String> {
-    let conn =
-        Connection::open("../dictionary.db").map_err(|e| format!("Failed to open DB: {}", e))?;
+    let conn = Connection::open(get_dictionary_db_path())
+        .map_err(|e| format!("Failed to open DB: {}", e))?;
 
     let fetch_entry = |target: &str| -> Result<Option<Definition>, String> {
         conn.query_row(
@@ -518,6 +536,21 @@ fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
 
+#[tauri::command]
+fn check_first_run(window: tauri::WebviewWindow) -> bool {
+    let first = IS_FIRST_RUN.swap(false, std::sync::atomic::Ordering::SeqCst);
+    if first {
+        let _ = window.set_size(Size::Logical(LogicalSize {
+            width: 720.0,
+            height: 520.0,
+        }));
+        let _ = window.center();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    first
+}
+
 fn position_popup_near_cursor(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
     // Ensure compact popup size before computing bounds
     let _ = window.set_size(Size::Logical(LogicalSize {
@@ -628,6 +661,42 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
+            // 0. Resolve production / dev database paths
+            let dict_path = app
+                .path()
+                .resource_dir()
+                .ok()
+                .and_then(|dir| {
+                    let direct = dir.join("dictionary.db");
+                    if direct.exists() {
+                        Some(direct)
+                    } else {
+                        let up = dir.join("_up_").join("dictionary.db");
+                        if up.exists() {
+                            Some(up)
+                        } else {
+                            None
+                        }
+                    }
+                })
+                .unwrap_or_else(|| std::path::PathBuf::from("../dictionary.db"));
+            let _ = DICTIONARY_DB_PATH.set(dict_path);
+
+            let user_db_path = if cfg!(debug_assertions) {
+                std::path::PathBuf::from("../user_data.db")
+            } else {
+                let data_dir = app
+                    .path()
+                    .app_data_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."));
+                let _ = std::fs::create_dir_all(&data_dir);
+                data_dir.join("user_data.db")
+            };
+            if !user_db_path.exists() {
+                IS_FIRST_RUN.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            let _ = USER_DB_PATH.set(user_db_path);
+
             // 1. Register saved or default global shortcut
             let saved_key = get_saved_hotkey();
             let shortcut: Shortcut = saved_key
@@ -717,7 +786,8 @@ pub fn run() {
             set_current_hotkey,
             resize_window,
             speak_word,
-            export_word_bank
+            export_word_bank,
+            check_first_run
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
