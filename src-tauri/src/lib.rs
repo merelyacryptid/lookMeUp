@@ -34,10 +34,17 @@ fn simulate_ctrl_c() -> bool {
         // Explicitly release any modifier keys held by the user's hotkey chord
         // so the foreground app sees a clean Ctrl+C instead of Ctrl+Alt+C or Ctrl+Shift+C.
         for vk in [
-            VK_MENU, VK_LMENU, VK_RMENU,
-            VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
-            VK_LWIN, VK_RWIN,
-            VK_CONTROL, VK_LCONTROL, VK_RCONTROL,
+            VK_MENU,
+            VK_LMENU,
+            VK_RMENU,
+            VK_SHIFT,
+            VK_LSHIFT,
+            VK_RSHIFT,
+            VK_LWIN,
+            VK_RWIN,
+            VK_CONTROL,
+            VK_LCONTROL,
+            VK_RCONTROL,
         ] {
             keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
         }
@@ -105,8 +112,9 @@ fn get_user_db() -> Result<Connection, String> {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('hotkey', 'ctrl+alt+d');"
-    ).map_err(|e| format!("Failed to initialize user tables: {}", e))?;
+        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('hotkey', 'ctrl+alt+d');",
+    )
+    .map_err(|e| format!("Failed to initialize user tables: {}", e))?;
 
     // Safe migrations if table previously existed without newer columns
     let _ = conn.execute(
@@ -418,17 +426,80 @@ fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
 
+fn position_popup_near_cursor(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+    // Ensure compact popup size before computing bounds
+    let _ = window.set_size(Size::Logical(LogicalSize {
+        width: 380.0,
+        height: 340.0,
+    }));
+
+    let Ok(pos) = app.cursor_position() else {
+        return;
+    };
+
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let win_w = (380.0 * scale).round() as i32;
+    let win_h = (340.0 * scale).round() as i32;
+    let offset = (12.0 * scale).round() as i32;
+    let bottom_pad = (48.0 * scale).round() as i32; // Reserve space for Windows taskbar
+
+    // Find the monitor containing the cursor (supports multi-monitor setups)
+    let cursor_x = pos.x.round() as i32;
+    let cursor_y = pos.y.round() as i32;
+
+    let active_monitor = app
+        .available_monitors()
+        .ok()
+        .and_then(|monitors| {
+            monitors.into_iter().find(|m| {
+                let mp = m.position();
+                let ms = m.size();
+                cursor_x >= mp.x
+                    && cursor_x < mp.x + ms.width as i32
+                    && cursor_y >= mp.y
+                    && cursor_y < mp.y + ms.height as i32
+            })
+        })
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten());
+
+    let (x, y) = if let Some(mon) = active_monitor {
+        let mp = mon.position();
+        let ms = mon.size();
+        let mon_left = mp.x;
+        let mon_top = mp.y;
+        let mon_right = mp.x + ms.width as i32;
+        let mon_bottom = mp.y + ms.height as i32;
+
+        // Flip to left of cursor if too close to right edge, then clamp within monitor
+        let mut target_x = cursor_x + offset;
+        if target_x + win_w > mon_right - offset {
+            target_x = cursor_x - win_w - offset;
+        }
+        target_x = target_x.clamp(mon_left + offset, (mon_right - win_w - offset).max(mon_left + offset));
+
+        // Flip above cursor if too close to bottom edge/taskbar, then clamp within monitor
+        let mut target_y = cursor_y + offset;
+        if target_y + win_h > mon_bottom - bottom_pad {
+            target_y = cursor_y - win_h - offset;
+        }
+        target_y = target_y.clamp(mon_top + offset, (mon_bottom - win_h - bottom_pad).max(mon_top + offset));
+
+        (target_x, target_y)
+    } else {
+        ((cursor_x + offset).max(10), (cursor_y + offset).max(10))
+    };
+
+    let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+}
+
 fn handle_hotkey_trigger(app: &tauri::AppHandle) {
     #[cfg(target_os = "windows")]
     let _copied = simulate_ctrl_c();
 
     if let Some(window) = app.get_webview_window("main") {
-        // Position window near cursor
-        if let Ok(pos) = app.cursor_position() {
-            let x = (pos.x as i32 + 12).max(10);
-            let y = (pos.y as i32 + 12).max(10);
-            let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
-        }
+        // Position window near cursor, clamped within active monitor bounds
+        position_popup_near_cursor(app, &window);
 
         // Read text from clipboard
         let captured = if let Ok(text) = app.clipboard().read_text() {
