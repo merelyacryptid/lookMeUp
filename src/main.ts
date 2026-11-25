@@ -75,6 +75,7 @@ function showDefinition(def: Definition) {
   popupWord.textContent = def.word;
   popupIpa.textContent = def.ipa || "";
   popupSpeakBtn.classList.remove("hidden");
+  popupSaveBtn.classList.remove("hidden");
   popupPos.textContent = def.part_of_speech || "word";
   popupCount.textContent = def.lookup_count > 1 ? `${def.lookup_count}x` : "";
 
@@ -96,6 +97,7 @@ function showError(msg: string) {
   popupWord.textContent = "Not Found";
   popupIpa.textContent = "";
   popupSpeakBtn.classList.add("hidden");
+  popupSaveBtn.classList.add("hidden");
   popupPos.textContent = "";
   popupCount.textContent = "";
   updateSaveBtnState(false);

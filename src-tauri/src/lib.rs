@@ -67,9 +67,6 @@ fn get_user_db() -> Result<Connection, String> {
             first_looked_up INTEGER NOT NULL,
             last_looked_up INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_word_history_saved ON word_history(is_saved, lookup_count DESC);
-        CREATE INDEX IF NOT EXISTS idx_word_history_count ON word_history(lookup_count DESC);
-        CREATE INDEX IF NOT EXISTS idx_word_history_last ON word_history(last_looked_up DESC);
 
         CREATE TABLE IF NOT EXISTS app_settings (
             key TEXT PRIMARY KEY,
@@ -87,6 +84,13 @@ fn get_user_db() -> Result<Connection, String> {
         "ALTER TABLE word_history ADD COLUMN ipa TEXT NOT NULL DEFAULT ''",
         [],
     );
+
+    // Create indexes AFTER columns are guaranteed to exist
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_word_history_saved ON word_history(is_saved, lookup_count DESC);
+        CREATE INDEX IF NOT EXISTS idx_word_history_count ON word_history(lookup_count DESC);
+        CREATE INDEX IF NOT EXISTS idx_word_history_last ON word_history(last_looked_up DESC);"
+    ).map_err(|e| format!("Failed to create user indexes: {}", e))?;
 
     Ok(conn)
 }
@@ -180,7 +184,8 @@ fn toggle_save_word(word: String) -> Result<bool, String> {
             let json_meanings = serde_json::to_string(&def.meanings).unwrap_or_default();
             conn.execute(
                 "INSERT INTO word_history (word, part_of_speech, ipa, definition_json, lookup_count, is_saved, first_looked_up, last_looked_up)
-                 VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?5)",
+                 VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?5)
+                 ON CONFLICT(word) DO UPDATE SET is_saved = 1;",
                 params![def.word, def.part_of_speech, def.ipa, json_meanings, now],
             ).map_err(|e| e.to_string())?;
             Ok(true)
