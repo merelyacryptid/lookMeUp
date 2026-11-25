@@ -369,14 +369,7 @@ fn export_word_bank(path: String, format: String, saved_only: bool) -> Result<us
     Ok(items.len())
 }
 
-#[tauri::command]
-fn lookup_word(word: String) -> Result<Definition, String> {
-    let start = Instant::now();
-    let clean_word = word.trim();
-    if clean_word.is_empty() {
-        return Err("Word cannot be empty".to_string());
-    }
-
+fn query_dictionary_entry(clean_word: &str) -> Result<Option<Definition>, String> {
     let conn =
         Connection::open("../dictionary.db").map_err(|e| format!("Failed to open DB: {}", e))?;
 
@@ -422,6 +415,19 @@ fn lookup_word(word: String) -> Result<Definition, String> {
             result = fetch_entry(&hw)?;
         }
     }
+
+    Ok(result)
+}
+
+#[tauri::command]
+fn lookup_word(word: String) -> Result<Definition, String> {
+    let start = Instant::now();
+    let clean_word = word.trim();
+    if clean_word.is_empty() {
+        return Err("Word cannot be empty".to_string());
+    }
+
+    let mut result = query_dictionary_entry(clean_word)?;
 
     if let Some(ref mut def) = result {
         let (count, is_saved) = record_lookup(def);
@@ -715,4 +721,64 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn benchmark_rust_dictionary_lookups() {
+        let words = [
+            "score",
+            "scored",
+            "epiphany",
+            "epiphanies",
+            "serendipity",
+            "ubiquitous",
+            "computer",
+            "running",
+            "ran",
+            "children",
+        ];
+
+        println!("\n--- Rust Dictionary Lookup Benchmark (including Connection::open + JSON parse) ---");
+        let mut total_us: u128 = 0;
+
+        for word in words {
+            let t0 = Instant::now();
+            let def = query_dictionary_entry(word)
+                .expect("DB query failed")
+                .unwrap_or_else(|| panic!("Word '{}' not found", word));
+            let elapsed = t0.elapsed();
+            total_us += elapsed.as_micros();
+
+            assert!(!def.meanings.is_empty(), "Expected meanings for '{}'", word);
+            println!(
+                "  '{}' -> '{}' [{}] {} ({} meanings) in {:.3} ms",
+                word,
+                def.word,
+                def.part_of_speech,
+                def.ipa,
+                def.meanings.len(),
+                elapsed.as_secs_f64() * 1000.0
+            );
+            assert!(
+                elapsed.as_millis() < 50,
+                "Lookup for '{}' exceeded 50ms budget: {:?}",
+                word,
+                elapsed
+            );
+        }
+
+        let avg_ms = (total_us as f64 / words.len() as f64) / 1000.0;
+        println!("Average Rust lookup (cold open + query + JSON parse): {:.3} ms", avg_ms);
+
+        // Verify morphological lemma fallback specifically
+        let lemma = query_dictionary_entry("epiphanies")
+            .unwrap()
+            .expect("epiphanies should resolve");
+        assert_eq!(lemma.word.to_lowercase(), "epiphany");
+        assert!(!lemma.ipa.is_empty());
+    }
 }
