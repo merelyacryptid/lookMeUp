@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 interface Definition {
   word: string;
   part_of_speech: string;
+  ipa: string;
   meanings: string[];
   lookup_count: number;
   is_saved: boolean;
@@ -12,6 +13,7 @@ interface Definition {
 interface WordHistoryItem {
   word: string;
   part_of_speech: string;
+  ipa: string;
   meanings: string[];
   lookup_count: number;
   is_saved: boolean;
@@ -32,6 +34,8 @@ const companionSearch = document.querySelector<HTMLInputElement>("#companion-sea
 const btnOpenWordbank = document.querySelector<HTMLButtonElement>("#btn-open-wordbank")!;
 const btnClosePopup = document.querySelector<HTMLButtonElement>("#btn-close-popup")!;
 const popupWord = document.querySelector<HTMLElement>("#popup-word")!;
+const popupIpa = document.querySelector<HTMLElement>("#popup-ipa")!;
+const popupSpeakBtn = document.querySelector<HTMLButtonElement>("#popup-speak-btn")!;
 const popupPos = document.querySelector<HTMLElement>("#popup-pos")!;
 const popupCount = document.querySelector<HTMLElement>("#popup-count")!;
 const popupSaveBtn = document.querySelector<HTMLButtonElement>("#popup-save-btn")!;
@@ -69,6 +73,8 @@ function showDefinition(def: Definition) {
   companionSearch.value = def.word;
 
   popupWord.textContent = def.word;
+  popupIpa.textContent = def.ipa || "";
+  popupSpeakBtn.classList.remove("hidden");
   popupPos.textContent = def.part_of_speech || "word";
   popupCount.textContent = def.lookup_count > 1 ? `${def.lookup_count}x` : "";
 
@@ -86,12 +92,45 @@ function showDefinition(def: Definition) {
 }
 
 function showError(msg: string) {
+  activeWord = "";
   popupWord.textContent = "Not Found";
+  popupIpa.textContent = "";
+  popupSpeakBtn.classList.add("hidden");
   popupPos.textContent = "";
   popupCount.textContent = "";
   updateSaveBtnState(false);
   popupBody.innerHTML = `<p class="def-hint" style="color:#f87171;">${escapeHtml(msg)}</p>`;
 }
+
+async function speakCurrentWord(word: string) {
+  if (!word) return;
+  popupSpeakBtn.classList.add("speaking");
+
+  const hasWebSpeech = "speechSynthesis" in window && window.speechSynthesis.getVoices().length > 0;
+  if (hasWebSpeech) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = "en-US";
+    utterance.onend = () => popupSpeakBtn.classList.remove("speaking");
+    utterance.onerror = () => {
+      popupSpeakBtn.classList.remove("speaking");
+      invoke("speak_word", { word }).catch(() => {});
+    };
+    window.speechSynthesis.speak(utterance);
+  } else {
+    try {
+      await invoke("speak_word", { word });
+    } catch (err) {
+      console.error("Offline speech failed:", err);
+    } finally {
+      setTimeout(() => popupSpeakBtn.classList.remove("speaking"), 600);
+    }
+  }
+}
+
+popupSpeakBtn.addEventListener("click", () => {
+  if (activeWord) speakCurrentWord(activeWord);
+});
 
 function updateSaveBtnState(isSaved: boolean) {
   if (isSaved) {
@@ -257,6 +296,7 @@ function renderWordBank() {
       <div class="wordbank-info">
         <div class="wordbank-top">
           <span class="wordbank-word">${escapeHtml(item.word)}</span>
+          ${item.ipa ? `<span class="wordbank-ipa">${escapeHtml(item.ipa)}</span>` : ""}
           <span class="wordbank-pos">${escapeHtml(item.part_of_speech || "word")}</span>
           <span class="wordbank-badge">${item.lookup_count}x</span>
         </div>
@@ -277,6 +317,7 @@ function renderWordBank() {
       showDefinition({
         word: item.word,
         part_of_speech: item.part_of_speech,
+        ipa: item.ipa,
         meanings: item.meanings,
         lookup_count: item.lookup_count,
         is_saved: item.is_saved,

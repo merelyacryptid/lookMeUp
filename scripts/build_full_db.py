@@ -8,6 +8,8 @@ import urllib.request
 
 DATASET_URL = "https://raw.githubusercontent.com/CloudBytes-Academy/English-Dictionary-Open-Source/main/v2/dictionary.jsonl.gz"
 LOCAL_DATASET = "scripts/dictionary.jsonl.gz"
+IPA_URL = "https://raw.githubusercontent.com/open-dict-data/ipa-dict/master/data/en_US.txt"
+LOCAL_IPA = "scripts/en_US.txt"
 
 IRREGULAR_FORMS = {
     # Verbs
@@ -118,10 +120,33 @@ def ensure_dataset():
         t0 = time.time()
         urllib.request.urlretrieve(DATASET_URL, LOCAL_DATASET)
         print(f"Downloaded in {time.time() - t0:.2f}s!")
+    if not os.path.exists(LOCAL_IPA):
+        print(f"Downloading IPA phonetics from {IPA_URL}...")
+        t0 = time.time()
+        urllib.request.urlretrieve(IPA_URL, LOCAL_IPA)
+        print(f"Downloaded IPA in {time.time() - t0:.2f}s!")
+
+def load_ipa_dict():
+    ipa_map = {}
+    if not os.path.exists(LOCAL_IPA):
+        return ipa_map
+    with open(LOCAL_IPA, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or "\t" not in line:
+                continue
+            word, ipa_raw = line.split("\t", 1)
+            # Some entries have multiple comma-separated pronunciations; take the primary one
+            primary_ipa = ipa_raw.split(",")[0].strip()
+            if word and primary_ipa:
+                ipa_map[word.lower()] = primary_ipa
+    print(f"Loaded {len(ipa_map):,} IPA phonetic transcriptions.")
+    return ipa_map
 
 def build_full_database(dataset_path=LOCAL_DATASET, db_path="dictionary.db", batch_size=25000):
     start_time = time.time()
     ensure_dataset()
+    ipa_map = load_ipa_dict()
 
     tmp_db_path = db_path + ".tmp"
     if os.path.exists(tmp_db_path):
@@ -142,6 +167,7 @@ def build_full_database(dataset_path=LOCAL_DATASET, db_path="dictionary.db", bat
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             word TEXT NOT NULL,
             part_of_speech TEXT NOT NULL,
+            ipa TEXT NOT NULL DEFAULT '',
             meanings TEXT NOT NULL
         );
     """)
@@ -217,8 +243,9 @@ def build_full_database(dataset_path=LOCAL_DATASET, db_path="dictionary.db", bat
 
     for word, item in words_map.items():
         pos_str = ", ".join(sorted(item["pos"])) or "unknown"
+        ipa_str = ipa_map.get(word.lower(), "")
         meanings_json = json.dumps(item["meanings"])
-        entries_batch.append((word, pos_str, meanings_json))
+        entries_batch.append((word, pos_str, ipa_str, meanings_json))
 
         # Explicit forms from Kaikki
         for f in item["forms"]:
@@ -231,12 +258,12 @@ def build_full_database(dataset_path=LOCAL_DATASET, db_path="dictionary.db", bat
                 forms_set.add((gen_f.lower(), word))
 
         if len(entries_batch) >= batch_size:
-            cur.executemany("INSERT INTO entries (word, part_of_speech, meanings) VALUES (?, ?, ?)", entries_batch)
+            cur.executemany("INSERT INTO entries (word, part_of_speech, ipa, meanings) VALUES (?, ?, ?, ?)", entries_batch)
             conn.commit()
             entries_batch.clear()
 
     if entries_batch:
-        cur.executemany("INSERT INTO entries (word, part_of_speech, meanings) VALUES (?, ?, ?)", entries_batch)
+        cur.executemany("INSERT INTO entries (word, part_of_speech, ipa, meanings) VALUES (?, ?, ?, ?)", entries_batch)
         conn.commit()
         entries_batch.clear()
 
@@ -297,20 +324,21 @@ def verify_database(db_path="dictionary.db"):
 
     for word, is_headword in test_queries:
         t0 = time.perf_counter()
-        cur.execute("SELECT word, part_of_speech, meanings FROM entries WHERE word = ? COLLATE NOCASE", (word,))
+        cur.execute("SELECT word, part_of_speech, ipa, meanings FROM entries WHERE word = ? COLLATE NOCASE", (word,))
         row = cur.fetchone()
         if not row:
             # Fallback to forms table
             cur.execute("SELECT headword FROM forms WHERE form = ? COLLATE NOCASE", (word,))
             hw_row = cur.fetchone()
             if hw_row:
-                cur.execute("SELECT word, part_of_speech, meanings FROM entries WHERE word = ? COLLATE NOCASE", (hw_row[0],))
+                cur.execute("SELECT word, part_of_speech, ipa, meanings FROM entries WHERE word = ? COLLATE NOCASE", (hw_row[0],))
                 row = cur.fetchone()
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         if row:
-            meanings = json.loads(row[2])
-            print(f"Lookup '{word}' -> '{row[0]}' [{row[1]}] ({len(meanings)} meanings) in {elapsed_ms:.3f} ms")
+            meanings = json.loads(row[3])
+            ipa_display = row[2] if row[2] else "no-ipa"
+            print(f"Lookup '{word}' -> '{row[0]}' [{row[1]}] {ipa_display} ({len(meanings)} meanings) in {elapsed_ms:.3f} ms")
         else:
             print(f"Lookup '{word}' -> NOT FOUND in {elapsed_ms:.3f} ms")
 

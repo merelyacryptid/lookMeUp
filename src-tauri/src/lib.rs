@@ -36,6 +36,7 @@ fn simulate_ctrl_c() {
 pub struct Definition {
     pub word: String,
     pub part_of_speech: String,
+    pub ipa: String,
     pub meanings: Vec<String>,
     pub lookup_count: u32,
     pub is_saved: bool,
@@ -45,6 +46,7 @@ pub struct Definition {
 pub struct WordHistoryItem {
     pub word: String,
     pub part_of_speech: String,
+    pub ipa: String,
     pub meanings: Vec<String>,
     pub lookup_count: u32,
     pub is_saved: bool,
@@ -58,6 +60,7 @@ fn get_user_db() -> Result<Connection, String> {
         "CREATE TABLE IF NOT EXISTS word_history (
             word TEXT PRIMARY KEY COLLATE NOCASE,
             part_of_speech TEXT NOT NULL,
+            ipa TEXT NOT NULL DEFAULT '',
             definition_json TEXT NOT NULL,
             lookup_count INTEGER NOT NULL DEFAULT 1,
             is_saved INTEGER NOT NULL DEFAULT 0,
@@ -75,9 +78,13 @@ fn get_user_db() -> Result<Connection, String> {
         INSERT OR IGNORE INTO app_settings (key, value) VALUES ('hotkey', 'ctrl+alt+d');"
     ).map_err(|e| format!("Failed to initialize user tables: {}", e))?;
 
-    // Safe migration if table previously existed without is_saved column
+    // Safe migrations if table previously existed without newer columns
     let _ = conn.execute(
         "ALTER TABLE word_history ADD COLUMN is_saved INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE word_history ADD COLUMN ipa TEXT NOT NULL DEFAULT ''",
         [],
     );
 
@@ -117,12 +124,13 @@ fn record_lookup(def: &Definition) -> (u32, bool) {
         let json_meanings = serde_json::to_string(&def.meanings).unwrap_or_default();
 
         let _ = conn.execute(
-            "INSERT INTO word_history (word, part_of_speech, definition_json, lookup_count, is_saved, first_looked_up, last_looked_up)
-             VALUES (?1, ?2, ?3, 1, 0, ?4, ?4)
+            "INSERT INTO word_history (word, part_of_speech, ipa, definition_json, lookup_count, is_saved, first_looked_up, last_looked_up)
+             VALUES (?1, ?2, ?3, ?4, 1, 0, ?5, ?5)
              ON CONFLICT(word) DO UPDATE SET
                  lookup_count = lookup_count + 1,
-                 last_looked_up = ?4;",
-            params![def.word, def.part_of_speech, json_meanings, now],
+                 ipa = CASE WHEN ?3 != '' THEN ?3 ELSE ipa END,
+                 last_looked_up = ?5;",
+            params![def.word, def.part_of_speech, def.ipa, json_meanings, now],
         );
 
         // Retrieve current count and saved status
@@ -171,9 +179,9 @@ fn toggle_save_word(word: String) -> Result<bool, String> {
                 .as_secs() as i64;
             let json_meanings = serde_json::to_string(&def.meanings).unwrap_or_default();
             conn.execute(
-                "INSERT INTO word_history (word, part_of_speech, definition_json, lookup_count, is_saved, first_looked_up, last_looked_up)
-                 VALUES (?1, ?2, ?3, 1, 1, ?4, ?4)",
-                params![def.word, def.part_of_speech, json_meanings, now],
+                "INSERT INTO word_history (word, part_of_speech, ipa, definition_json, lookup_count, is_saved, first_looked_up, last_looked_up)
+                 VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?5)",
+                params![def.word, def.part_of_speech, def.ipa, json_meanings, now],
             ).map_err(|e| e.to_string())?;
             Ok(true)
         }
@@ -184,21 +192,23 @@ fn toggle_save_word(word: String) -> Result<bool, String> {
 fn get_word_history() -> Result<Vec<WordHistoryItem>, String> {
     let conn = get_user_db()?;
     let mut stmt = conn
-        .prepare("SELECT word, part_of_speech, definition_json, lookup_count, is_saved, last_looked_up FROM word_history ORDER BY is_saved DESC, lookup_count DESC, last_looked_up DESC")
+        .prepare("SELECT word, part_of_speech, ipa, definition_json, lookup_count, is_saved, last_looked_up FROM word_history ORDER BY is_saved DESC, lookup_count DESC, last_looked_up DESC")
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
         .query_map([], |row| {
             let word: String = row.get(0)?;
             let pos: String = row.get(1)?;
-            let json_str: String = row.get(2)?;
-            let count: u32 = row.get(3)?;
-            let is_saved: bool = row.get::<_, i32>(4)? != 0;
-            let last: i64 = row.get(5)?;
+            let ipa: String = row.get(2)?;
+            let json_str: String = row.get(3)?;
+            let count: u32 = row.get(4)?;
+            let is_saved: bool = row.get::<_, i32>(5)? != 0;
+            let last: i64 = row.get(6)?;
             let meanings: Vec<String> = serde_json::from_str(&json_str).unwrap_or_default();
             Ok(WordHistoryItem {
                 word,
                 part_of_speech: pos,
+                ipa,
                 meanings,
                 lookup_count: count,
                 is_saved,
@@ -240,16 +250,18 @@ fn lookup_word(word: String) -> Result<Definition, String> {
 
     let fetch_entry = |target: &str| -> Result<Option<Definition>, String> {
         conn.query_row(
-            "SELECT word, part_of_speech, meanings FROM entries WHERE word = ?1 COLLATE NOCASE",
+            "SELECT word, part_of_speech, ipa, meanings FROM entries WHERE word = ?1 COLLATE NOCASE",
             params![target],
             |row| {
                 let w: String = row.get(0)?;
                 let pos: String = row.get(1)?;
-                let m_json: String = row.get(2)?;
+                let ipa: String = row.get(2)?;
+                let m_json: String = row.get(3)?;
                 let meanings: Vec<String> = serde_json::from_str(&m_json).unwrap_or_default();
                 Ok(Definition {
                     word: w,
                     part_of_speech: pos,
+                    ipa,
                     meanings,
                     lookup_count: 1,
                     is_saved: false,
@@ -334,6 +346,32 @@ fn resize_window(window: tauri::WebviewWindow, expanded: bool) -> Result<(), Str
             height: 340.0,
         }));
     }
+    Ok(())
+}
+
+#[tauri::command]
+fn speak_word(word: String) -> Result<(), String> {
+    let clean = word.trim().to_string();
+    if clean.is_empty() || clean.len() > 80 {
+        return Err("Invalid word for speech".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    std::thread::spawn(move || {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _ = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Speak($env:LOOKMEUP_SPEAK_WORD);",
+            ])
+            .env("LOOKMEUP_SPEAK_WORD", &clean)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    });
+
     Ok(())
 }
 
@@ -476,7 +514,8 @@ pub fn run() {
             toggle_save_word,
             get_current_hotkey,
             set_current_hotkey,
-            resize_window
+            resize_window,
+            speak_word
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

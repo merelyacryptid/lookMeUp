@@ -142,7 +142,8 @@ body {
 
 .def-meta {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   overflow: hidden;
 }
@@ -152,6 +153,42 @@ body {
   font-weight: 700;
   color: #fafafa;
   text-transform: capitalize;
+}
+
+.def-ipa {
+  font-size: 12px;
+  color: #a1a1aa;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.2px;
+}
+
+.def-ipa:empty {
+  display: none;
+}
+
+.speak-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.speak-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.speak-btn.speaking {
+  color: #38bdf8;
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.22);
 }
 
 .def-pos {
@@ -396,6 +433,11 @@ body {
   font-weight: 700;
   color: #fafafa;
   text-transform: capitalize;
+}
+
+.wordbank-ipa {
+  font-size: 11px;
+  color: #a1a1aa;
 }
 
 .wordbank-pos {

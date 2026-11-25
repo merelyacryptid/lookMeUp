@@ -14,7 +14,8 @@ LookMeUp automatically captures the word, queries its offline B-tree SQLite dict
 * **Universal Desktop Companion:** Works across every application on your machine without requiring plugins or browser extensions.
 * **Automatic Word Capture:** Select any text and press your hotkey. LookMeUp automatically copies the highlighted text and resolves the definition without needing manual `Ctrl+C`.
 * **Configurable Global Hotkey:** Choose your preferred shortcut chord (e.g. `Ctrl+Alt+D`, `Ctrl+Shift+D`, `Alt+D`, or any custom key combination) directly in Settings.
-* **Instant Offline SQLite (<1 ms):** Directly queries a local, pre-indexed SQLite B-tree database with 224,954 headwords and 218,157 morphological lemma fallbacks (e.g. "epiphanies" routes to "epiphany", "running" to "run").
+* **Instant Offline SQLite (<1 ms):** Directly queries a local, pre-indexed SQLite B-tree database with 224,954 headwords, 125,927 IPA phonetic transcriptions, and 218,157 morphological lemma fallbacks (e.g. "epiphanies" routes to "epiphany", "running" to "run").
+* **Offline Pronunciation & Speech:** Displays IPA phonetics right beside the headword and provides one-click offline audio pronunciation via Web Speech API with native Windows SAPI fallback.
 * **Word Bank & Frequency Tracker:** Automatically records your lookups on-device in `user_data.db`. See your device-first lookup frequency (`2x`, `3x`), save words with one click, and browse or search your personal Word Bank anytime.
 * **System Tray Resident:** Minimizes cleanly to the Windows notification area / system tray so it is always ready without cluttering your taskbar.
 * **Complete Privacy:** 100% offline. Zero network calls, zero telemetry, zero accounts.
@@ -105,7 +106,7 @@ python scripts/build_full_db.py
 - [x] **Phase 6.2: Configurable Global Hotkey** - SQLite settings persistence and dynamic runtime shortcut re-registration via Settings UI and System Tray.
 - [x] **Phase 6.3: System Tray Resident & Auto-Dismiss** - Runs silently in the Windows system tray with left-click toggle, right-click context menu, and blur/Esc auto-dismissal.
 - [x] **Phase 6.4: Word Bank, Frequency Badges, & Saved Words** - Local vocabulary management in `user_data.db`, UPSERT tracking, "All Lookups" vs. "Saved Words" filter tabs, and frequency badges (`2x`, `3x`).
-- [ ] **Phase 7: Offline Text-to-Speech & IPA Phonetics** - In-popup pronunciation guide and native OS speech synthesis audio.
+- [x] **Phase 7: Offline Text-to-Speech & IPA Phonetics** - In-popup IPA pronunciation guide (125,927 transcriptions) and native OS speech synthesis audio.
 - [ ] **Phase 8: Anki & Flashcard Export** - One-click export of saved words and definitions into Anki decks and CSV format for spaced repetition.
 - [ ] **Phase 9: Production Packaging & Windows Installer** - Standalone NSIS / MSI installer with auto-start on boot option.
 
