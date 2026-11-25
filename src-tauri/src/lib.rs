@@ -9,8 +9,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[cfg(target_os = "windows")]
-unsafe fn simulate_ctrl_c() {
-    extern "system" {
+fn simulate_ctrl_c() {
+    unsafe extern "system" {
         fn keybd_event(bVk: u8, bScan: u8, dwFlags: u32, dwExtraInfo: usize);
     }
     const VK_CONTROL: u8 = 0x11;
@@ -21,10 +21,12 @@ unsafe fn simulate_ctrl_c() {
     std::thread::sleep(std::time::Duration::from_millis(40));
 
     // Send Ctrl + C
-    keybd_event(VK_CONTROL, 0, 0, 0);
-    keybd_event(VK_C, 0, 0, 0);
-    keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0);
-    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+    unsafe {
+        keybd_event(VK_CONTROL, 0, 0, 0);
+        keybd_event(VK_C, 0, 0, 0);
+        keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+    }
 
     // Wait for target application to populate clipboard
     std::thread::sleep(std::time::Duration::from_millis(70));
@@ -342,9 +344,7 @@ fn hide_window(window: tauri::WebviewWindow) {
 
 fn handle_hotkey_trigger(app: &tauri::AppHandle) {
     #[cfg(target_os = "windows")]
-    unsafe {
-        simulate_ctrl_c();
-    }
+    simulate_ctrl_c();
 
     if let Some(window) = app.get_webview_window("main") {
         // Position window near cursor
