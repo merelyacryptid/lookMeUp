@@ -828,7 +828,7 @@ body {
   height: 7px;
   border-radius: 999px;
   background: rgba(229, 207, 168, 0.20);
-  transition: all 0.25s ease;
+  transition: width 0.38s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .step-dot.active {
@@ -981,23 +981,26 @@ body {
 
 .reel-progress-fill {
   display: block;
-  width: 0%;
+  width: 100%;
   height: 100%;
-  background: #e5cfa8;
+  background: linear-gradient(90deg, #c9a978, #f2dfc0);
   border-radius: 999px;
+  transform-origin: left center;
+  transform: scaleX(0);
+  will-change: transform;
 }
 
 .reel-tab.done .reel-progress-fill {
-  width: 100%;
+  transform: scaleX(1);
 }
 
 .reel-tab.active .reel-progress-fill {
-  animation: reelFill 3.8s linear forwards;
+  animation: reelFill var(--reel-duration, 3.8s) linear forwards;
 }
 
 @keyframes reelFill {
-  from { width: 0%; }
-  to { width: 100%; }
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
 }
 
 .reel-label {
@@ -1005,7 +1008,7 @@ body {
   font-family: monospace;
   font-weight: 600;
   color: var(--text-muted);
-  transition: color 0.2s ease;
+  transition: color 0.28s ease;
 }
 
 .reel-tab.active .reel-label {
@@ -1014,7 +1017,7 @@ body {
 
 .reel-viewport {
   position: relative;
-  min-height: 220px;
+  min-height: 224px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1024,7 +1027,19 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  animation: glassFadeIn 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: reelSlideIn 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+@keyframes reelSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .reel-caption {
@@ -1084,7 +1099,9 @@ body {
   inset: 0;
   background: rgba(229, 207, 168, 0.34);
   border-radius: 4px;
-  width: 0%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  will-change: transform, opacity;
   animation: sweepSelect 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
@@ -1100,14 +1117,15 @@ body {
   top: 66px;
   left: 196px;
   z-index: 2;
+  will-change: transform, opacity;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
   animation: cursorGlide 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
 @keyframes sweepSelect {
-  0%, 24% { width: 0%; opacity: 0.7; }
-  58%, 88% { width: 100%; opacity: 1; }
-  100% { width: 0%; opacity: 0; }
+  0%, 24% { transform: scaleX(0); opacity: 0.7; }
+  58%, 88% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(0); opacity: 0; }
 }
 
 @keyframes cursorGlide {
@@ -1202,6 +1220,24 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  opacity: 0;
+  animation: statCardReveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.stat-glass-card:nth-child(1) { animation-delay: 0.04s; }
+.stat-glass-card:nth-child(2) { animation-delay: 0.14s; }
+.stat-glass-card:nth-child(3) { animation-delay: 0.24s; }
+.stat-glass-card:nth-child(4) { animation-delay: 0.34s; }
+
+@keyframes statCardReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .stat-value {

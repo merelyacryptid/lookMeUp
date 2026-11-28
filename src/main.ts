@@ -579,9 +579,13 @@ function showReelSlide(idx: number) {
   currentReelSlide = idx;
   if (reelTimer) window.clearTimeout(reelTimer);
 
+  // Instant lookup slide (index 2) lasts 1 second longer (4.8s vs 3.8s)
+  const durationMs = idx === 2 ? 4800 : 3800;
+
   reelSlides.forEach((s, i) => s.classList.toggle("hidden", i !== idx));
   reelTabs.forEach((tab, i) => {
     tab.classList.remove("active", "done");
+    tab.style.setProperty("--reel-duration", `${durationMs}ms`);
     // Force animation restart on active progress bar
     void tab.offsetWidth;
     if (i < idx) tab.classList.add("done");
@@ -590,14 +594,14 @@ function showReelSlide(idx: number) {
 
   if (idx === 0) playSlide1Typewriter();
   if (idx === 2) {
-    animateCounter(statSpeedVal, 2.8, 700, 1, " ms");
-    animateCounter(statWordsVal, 224954, 900);
-    animateCounter(statIpaVal, 125927, 900);
+    animateCounter(statSpeedVal, 2.8, 950, 1, " ms");
+    animateCounter(statWordsVal, 224954, 1150);
+    animateCounter(statIpaVal, 125927, 1150);
   }
 
   reelTimer = window.setTimeout(() => {
     showReelSlide((currentReelSlide + 1) % reelSlides.length);
-  }, 3800);
+  }, durationMs);
 }
 
 function startReel(startIdx = 0) {
