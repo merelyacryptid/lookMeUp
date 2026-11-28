@@ -11,14 +11,14 @@
     <div id="app-container" class="companion-container">
       <!-- 1. Compact Floating Definition Card -->
       <section id="popup-view" class="popup-card-view">
-        <header class="companion-header">
-          <div class="search-box-wrapper">
+        <header class="companion-header" data-tauri-drag-region>
+          <div class="search-box-wrapper" data-tauri-drag-region="false">
             <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <input type="text" id="companion-search" class="companion-search-input" placeholder="Type or press hotkey on any word..." />
           </div>
-          <div class="companion-header-actions">
+          <div class="companion-header-actions" data-tauri-drag-region="false">
             <button id="btn-open-wordbank" class="icon-btn" title="Open Word Bank & Settings">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
@@ -59,24 +59,24 @@
           </div>
         </main>
 
-        <footer class="companion-footer">
-          <span class="offline-indicator"><span class="dot"></span> 100% Offline (225k words)</span>
+        <footer class="companion-footer" data-tauri-drag-region>
+          <span class="offline-indicator" data-tauri-drag-region><span class="dot"></span> 100% Offline (225k words)</span>
           <span class="hotkey-pill" id="footer-hotkey-pill">Ctrl+Alt+D</span>
         </footer>
       </section>
 
       <!-- 2. Expanded Word Bank & Settings View -->
       <section id="wordbank-view" class="wordbank-view hidden">
-        <header class="wordbank-header">
-          <div class="wordbank-title-group">
-            <button id="btn-back-to-popup" class="icon-btn back-btn" title="Back to Definition Card">
+        <header class="wordbank-header" data-tauri-drag-region>
+          <div class="wordbank-title-group" data-tauri-drag-region>
+            <button id="btn-back-to-popup" class="icon-btn back-btn" title="Back to Definition Card" data-tauri-drag-region="false">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
               </svg>
             </button>
-            <span class="wordbank-title">Word Bank & Settings</span>
+            <span class="wordbank-title" data-tauri-drag-region>Word Bank & Settings</span>
           </div>
-          <button id="btn-close-wordbank" class="icon-btn close-btn" title="Close (Esc)">&times;</button>
+          <button id="btn-close-wordbank" class="icon-btn close-btn" title="Close (Esc)" data-tauri-drag-region="false">&times;</button>
         </header>
 
         <nav class="wordbank-nav-tabs">
@@ -146,10 +146,10 @@
       <!-- 3. Interactive Glassmorphic Onboarding View -->
       <section id="onboarding-view" class="onboarding-view hidden">
         <div class="onboard-glow"></div>
-        <header class="onboard-top">
-          <div class="onboard-brand">
+        <header class="onboard-top" data-tauri-drag-region>
+          <div class="onboard-brand" data-tauri-drag-region>
             <span class="dot"></span>
-            <span>LookMeUp Setup</span>
+            <span data-tauri-drag-region>LookMeUp Setup</span>
           </div>
           <div class="onboard-dots">
             <span class="step-dot active" data-step="1"></span>
