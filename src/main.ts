@@ -129,7 +129,7 @@ function showError(msg: string) {
   popupPos.textContent = "";
   popupCount.textContent = "";
   updateSaveBtnState(false);
-  popupBody.innerHTML = `<p class="def-hint" style="color:#f87171;">${escapeHtml(msg)}</p>`;
+  popupBody.innerHTML = `<p class="def-hint def-error">${escapeHtml(msg)}</p>`;
 }
 
 async function speakCurrentWord(word: string) {
@@ -310,8 +310,8 @@ function renderWordBank() {
   if (filtered.length === 0) {
     const msg =
       wordbankFilter === "saved"
-        ? `No saved words yet.<br><small style="color:#52525b;margin-top:4px;display:block;">Click "Save Word" on any definition card to pin vocabulary here.</small>`
-        : `No lookup history recorded yet.<br><small style="color:#52525b;margin-top:4px;display:block;">Press your hotkey over any word in any desktop app to start building your personal memory bank.</small>`;
+        ? `No saved words yet.<br><small class="empty-sub">Click "Save Word" on any definition card to pin vocabulary here.</small>`
+        : `No lookup history recorded yet.<br><small class="empty-sub">Press your hotkey over any word in any desktop app to start building your personal memory bank.</small>`;
     wordbankItemsList.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
@@ -573,7 +573,7 @@ demoChips.forEach((chip) => {
     const word = chip.dataset.word;
     if (!word) return;
     onboardDemoResult.classList.remove("hidden");
-    onboardDemoResult.innerHTML = `<span style="color:#94949e;">Looking up "${escapeHtml(word)}"...</span>`;
+    onboardDemoResult.innerHTML = `<span class="demo-ipa">Looking up "${escapeHtml(word)}"...</span>`;
     const t0 = performance.now();
     try {
       const def = await invoke<Definition>("lookup_word", { word });
@@ -581,12 +581,12 @@ demoChips.forEach((chip) => {
       const meaning = def.meanings[0] || "";
       onboardDemoResult.innerHTML = `
         <strong>${escapeHtml(def.word)}</strong>
-        <span style="color:#a1a1aa;margin:0 6px;">${escapeHtml(def.ipa)}</span>
-        <span style="color:#4ade80;font-size:11px;">(${elapsed} ms offline)</span>
-        <div style="margin-top:4px;color:#d4d4d8;">${escapeHtml(meaning)}</div>
+        <span class="demo-ipa">${escapeHtml(def.ipa)}</span>
+        <span class="demo-speed">(${elapsed} ms offline)</span>
+        <div class="demo-meaning">${escapeHtml(meaning)}</div>
       `;
     } catch (err) {
-      onboardDemoResult.innerHTML = `<span style="color:#f87171;">${escapeHtml(String(err))}</span>`;
+      onboardDemoResult.innerHTML = `<span class="demo-error">${escapeHtml(String(err))}</span>`;
     }
   });
 });
