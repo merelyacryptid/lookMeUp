@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.jpg" alt="LookMeUp Logo" width="420" />
+</p>
+
 # LookMeUp
 
 > A distraction-free, desktop-wide background companion providing instantaneous, 100% offline dictionary lookups across any application.
