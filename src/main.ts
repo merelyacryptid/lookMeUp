@@ -87,8 +87,16 @@ const btnOnboardBack2 = document.querySelector<HTMLButtonElement>("#btn-onboard-
 const btnOnboardNext2 = document.querySelector<HTMLButtonElement>("#btn-onboard-next-2")!;
 const btnOnboardBack3 = document.querySelector<HTMLButtonElement>("#btn-onboard-back-3")!;
 const btnOnboardFinish = document.querySelector<HTMLButtonElement>("#btn-onboard-finish")!;
-const demoChips = document.querySelectorAll<HTMLButtonElement>(".demo-chip");
-const onboardDemoResult = document.querySelector<HTMLElement>("#onboard-demo-result")!;
+const reelTabs = document.querySelectorAll<HTMLButtonElement>(".reel-tab");
+const reelSlides = [
+  document.querySelector<HTMLElement>("#reel-slide-0")!,
+  document.querySelector<HTMLElement>("#reel-slide-1")!,
+  document.querySelector<HTMLElement>("#reel-slide-2")!,
+];
+const slide1Typed = document.querySelector<HTMLElement>("#slide1-typed")!;
+const statSpeedVal = document.querySelector<HTMLElement>("#stat-speed-val")!;
+const statWordsVal = document.querySelector<HTMLElement>("#stat-words-val")!;
+const statIpaVal = document.querySelector<HTMLElement>("#stat-ipa-val")!;
 const onboardHotkeyInput = document.querySelector<HTMLInputElement>("#onboard-hotkey-input")!;
 const onboardPresetChips = document.querySelectorAll<HTMLButtonElement>(".onboard-preset-chip");
 const onboardHotkeyStatus = document.querySelector<HTMLElement>("#onboard-hotkey-status")!;
@@ -194,6 +202,7 @@ async function searchWord(query: string) {
 // ----------------------------------------------------
 async function switchView(expanded: boolean) {
   isExpanded = expanded;
+  stopReel();
   onboardingView.classList.add("hidden");
   if (expanded) {
     popupView.classList.add("hidden");
@@ -508,6 +517,9 @@ function escapeHtml(str: string): string {
 // 6. Interactive Glassmorphic Onboarding
 // ----------------------------------------------------
 let typewriterTimer: number | null = null;
+let reelTimer: number | null = null;
+let slide1Timer: number | null = null;
+let currentReelSlide = 0;
 
 function setOnboardingStep(stepIdx: number) {
   onboardSteps.forEach((el, i) => {
@@ -516,7 +528,88 @@ function setOnboardingStep(stepIdx: number) {
   stepDots.forEach((dot, i) => {
     dot.classList.toggle("active", i === stepIdx);
   });
+  if (stepIdx === 1) {
+    startReel(0);
+  } else {
+    stopReel();
+  }
 }
+
+function stopReel() {
+  if (reelTimer) {
+    window.clearTimeout(reelTimer);
+    reelTimer = null;
+  }
+  if (slide1Timer) {
+    window.clearTimeout(slide1Timer);
+    slide1Timer = null;
+  }
+}
+
+function animateCounter(el: HTMLElement, target: number, durationMs: number, decimals = 0, suffix = "") {
+  const t0 = performance.now();
+  const step = (now: number) => {
+    const progress = Math.min((now - t0) / durationMs, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const current = target * eased;
+    el.textContent =
+      decimals > 0
+        ? `${current.toFixed(decimals)}${suffix}`
+        : `${Math.round(current).toLocaleString()}${suffix}`;
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function playSlide1Typewriter() {
+  if (slide1Timer) window.clearTimeout(slide1Timer);
+  const text = "Select a word.";
+  slide1Typed.textContent = "";
+  let i = 0;
+  const tick = () => {
+    if (i < text.length) {
+      slide1Typed.textContent += text[i++];
+      slide1Timer = window.setTimeout(tick, 42);
+    }
+  };
+  tick();
+}
+
+function showReelSlide(idx: number) {
+  currentReelSlide = idx;
+  if (reelTimer) window.clearTimeout(reelTimer);
+
+  reelSlides.forEach((s, i) => s.classList.toggle("hidden", i !== idx));
+  reelTabs.forEach((tab, i) => {
+    tab.classList.remove("active", "done");
+    // Force animation restart on active progress bar
+    void tab.offsetWidth;
+    if (i < idx) tab.classList.add("done");
+    if (i === idx) tab.classList.add("active");
+  });
+
+  if (idx === 0) playSlide1Typewriter();
+  if (idx === 2) {
+    animateCounter(statSpeedVal, 2.8, 700, 1, " ms");
+    animateCounter(statWordsVal, 224954, 900);
+    animateCounter(statIpaVal, 125927, 900);
+  }
+
+  reelTimer = window.setTimeout(() => {
+    showReelSlide((currentReelSlide + 1) % reelSlides.length);
+  }, 3800);
+}
+
+function startReel(startIdx = 0) {
+  showReelSlide(startIdx);
+}
+
+reelTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const idx = Number(tab.dataset.slide || 0);
+    showReelSlide(idx);
+  });
+});
 
 function playTypewriterGreeting() {
   if (typewriterTimer) window.clearTimeout(typewriterTimer);
@@ -546,7 +639,6 @@ async function openOnboarding() {
   onboardingView.classList.remove("hidden");
   await invoke("resize_window", { expanded: true });
 
-  onboardDemoResult.classList.add("hidden");
   onboardHotkeyStatus.textContent = "";
   const curKey = await invoke<string>("get_current_hotkey").catch(() => "ctrl+alt+d");
   onboardHotkeyInput.value = curKey;
@@ -556,6 +648,7 @@ async function openOnboarding() {
 }
 
 async function finishOnboarding() {
+  stopReel();
   onboardingView.classList.add("hidden");
   await switchView(false);
 }
@@ -566,30 +659,6 @@ btnOnboardNext2.addEventListener("click", () => setOnboardingStep(2));
 btnOnboardBack3.addEventListener("click", () => setOnboardingStep(1));
 btnSkipOnboarding.addEventListener("click", () => finishOnboarding());
 btnReplayOnboarding.addEventListener("click", () => openOnboarding());
-
-// Interactive live dictionary test inside onboarding Step 2
-demoChips.forEach((chip) => {
-  chip.addEventListener("click", async () => {
-    const word = chip.dataset.word;
-    if (!word) return;
-    onboardDemoResult.classList.remove("hidden");
-    onboardDemoResult.innerHTML = `<span class="demo-ipa">Looking up "${escapeHtml(word)}"...</span>`;
-    const t0 = performance.now();
-    try {
-      const def = await invoke<Definition>("lookup_word", { word });
-      const elapsed = (performance.now() - t0).toFixed(1);
-      const meaning = def.meanings[0] || "";
-      onboardDemoResult.innerHTML = `
-        <strong>${escapeHtml(def.word)}</strong>
-        <span class="demo-ipa">${escapeHtml(def.ipa)}</span>
-        <span class="demo-speed">(${elapsed} ms offline)</span>
-        <div class="demo-meaning">${escapeHtml(meaning)}</div>
-      `;
-    } catch (err) {
-      onboardDemoResult.innerHTML = `<span class="demo-error">${escapeHtml(String(err))}</span>`;
-    }
-  });
-});
 
 // Live key-combo recorder for onboarding Step 3
 onboardHotkeyInput.addEventListener("keydown", (e) => {

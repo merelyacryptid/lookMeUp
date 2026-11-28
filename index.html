@@ -176,35 +176,90 @@
             </div>
           </div>
 
-          <!-- Step 2: How It Works + Interactive Live Test -->
+          <!-- Step 2: 3-Slide Product-Video Story Reel -->
           <div id="onboard-step-2" class="onboard-step hidden">
-            <h2 class="onboard-heading">Three steps. Under 50 ms.</h2>
-            <div class="onboard-flow-grid">
-              <div class="glass-tile">
-                <span class="tile-num">01</span>
-                <div class="tile-title">Select a word</div>
-                <div class="tile-desc">Highlight any word in PDFs, browsers, or editors.</div>
-              </div>
-              <div class="glass-tile">
-                <span class="tile-num">02</span>
-                <div class="tile-title">Press your hotkey</div>
-                <div class="tile-desc">Auto-captures the selection — no manual Ctrl+C.</div>
-              </div>
-              <div class="glass-tile">
-                <span class="tile-num">03</span>
-                <div class="tile-title">Instant lookup</div>
-                <div class="tile-desc">225k+ words &amp; IPA phonetics in &lt;50 ms offline.</div>
+            <div class="reel-header">
+              <div class="reel-tabs">
+                <button class="reel-tab active" data-slide="0">
+                  <span class="reel-progress"><span class="reel-progress-fill"></span></span>
+                  <span class="reel-label">01 Select</span>
+                </button>
+                <button class="reel-tab" data-slide="1">
+                  <span class="reel-progress"><span class="reel-progress-fill"></span></span>
+                  <span class="reel-label">02 Hotkey</span>
+                </button>
+                <button class="reel-tab" data-slide="2">
+                  <span class="reel-progress"><span class="reel-progress-fill"></span></span>
+                  <span class="reel-label">03 Instant</span>
+                </button>
               </div>
             </div>
 
-            <div class="onboard-demo-box">
-              <div class="demo-prompt">
-                Try it live — click a word:
-                <button class="demo-chip" data-word="epiphany">epiphany</button>
-                <button class="demo-chip" data-word="serendipity">serendipity</button>
-                <button class="demo-chip" data-word="ubiquitous">ubiquitous</button>
+            <div class="reel-viewport">
+              <!-- Slide 1: Select a word (typewriter + cursor sweep highlight) -->
+              <div id="reel-slide-0" class="reel-slide active">
+                <div class="reel-caption">
+                  <h2 class="reel-title"><span id="slide1-typed"></span><span class="typewriter-cursor">|</span></h2>
+                  <p class="reel-sub">Highlight any word in PDFs, browsers, or editors.</p>
+                </div>
+                <div class="reel-stage-card">
+                  <div class="mock-sentence">
+                    "...a sudden
+                    <span class="mock-highlight-wrap">
+                      <span class="mock-highlight-bg"></span>
+                      <span class="mock-target-word">epiphany</span>
+                    </span>
+                    while reading offline."
+                  </div>
+                  <svg class="mock-cursor" width="22" height="22" viewBox="0 0 24 24" fill="#f7f1e5" stroke="#14120e" stroke-width="1.5">
+                    <path d="M5 3l14 9-6.2 1.6L10 20z"></path>
+                  </svg>
+                </div>
               </div>
-              <div id="onboard-demo-result" class="demo-result hidden"></div>
+
+              <!-- Slide 2: Press your hotkey -->
+              <div id="reel-slide-1" class="reel-slide hidden">
+                <div class="reel-caption">
+                  <h2 class="reel-title">Press your hotkey.</h2>
+                  <p class="reel-sub">Choose your custom hotkey — zero manual Ctrl+C needed.</p>
+                </div>
+                <div class="reel-stage-card reel-keys-stage">
+                  <div class="keycap-row">
+                    <kbd class="anim-keycap key-1">Ctrl</kbd>
+                    <span class="key-plus">+</span>
+                    <kbd class="anim-keycap key-2">Alt</kbd>
+                    <span class="key-plus">+</span>
+                    <kbd class="anim-keycap key-3">D</kbd>
+                  </div>
+                  <div class="key-ripple"></div>
+                </div>
+              </div>
+
+              <!-- Slide 3: Instant lookup + animated stats -->
+              <div id="reel-slide-2" class="reel-slide hidden">
+                <div class="reel-caption">
+                  <h2 class="reel-title">Instant lookup.</h2>
+                  <p class="reel-sub">Sub-50 ms offline definitions, IPA phonetics, and speech.</p>
+                </div>
+                <div class="reel-stats-grid">
+                  <div class="stat-glass-card">
+                    <div class="stat-value" id="stat-speed-val">0.0 ms</div>
+                    <div class="stat-label">Avg Rust Lookup</div>
+                  </div>
+                  <div class="stat-glass-card">
+                    <div class="stat-value" id="stat-words-val">0</div>
+                    <div class="stat-label">Offline Headwords</div>
+                  </div>
+                  <div class="stat-glass-card">
+                    <div class="stat-value" id="stat-ipa-val">0</div>
+                    <div class="stat-label">IPA Transcriptions</div>
+                  </div>
+                  <div class="stat-glass-card">
+                    <div class="stat-value">100%</div>
+                    <div class="stat-label">Offline &amp; Private</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="onboard-actions space-between">
