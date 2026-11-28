@@ -579,8 +579,8 @@ function showReelSlide(idx: number) {
   currentReelSlide = idx;
   if (reelTimer) window.clearTimeout(reelTimer);
 
-  // Instant lookup slide (index 2) lasts 1 second longer (4.8s vs 3.8s)
-  const durationMs = idx === 2 ? 4800 : 3800;
+  // All slides last 4.8 seconds
+  const durationMs = 4800;
 
   reelSlides.forEach((s, i) => s.classList.toggle("hidden", i !== idx));
   reelTabs.forEach((tab, i) => {
